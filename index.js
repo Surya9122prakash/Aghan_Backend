@@ -13,7 +13,8 @@ const AWS = require('aws-sdk');
 const cron = require('node-cron');
 const { Pool } = require('pg');
 const e = require('express');
-require.config('dotenv')
+const jsPDF = require('jspdf')
+require('dotenv').config()
 AWS.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
     secretAccessKey: process.env.AWS_SECRET,
@@ -54,35 +55,29 @@ const GOLD_BOARD_LEVEL_INCOME = GOLD_BOARD_INCOME_THRESHOLD * BOARD_LEVEL_INCOME
 const DIAMOND_BOARD_LEVEL_INCOME = DIAMOND_BOARD_INCOME_THRESHOLD * BOARD_LEVEL_INCOME_PERCENTAGE;
 const PLATINUM_BOARD_LEVEL_INCOME = PLATINUM_BOARD_INCOME_THRESHOLD * BOARD_LEVEL_INCOME_PERCENTAGE;
 const KING_BOARD_LEVEL_INCOME = KING_BOARD_INCOME_THRESHOLD * BOARD_LEVEL_INCOME_PERCENTAGE;
-const SILVER_TO_GOLD_UPGRADE_AMOUNT = 10000; // Or whatever the correct value is
+const SILVER_TO_GOLD_UPGRADE_AMOUNT = 10000;
 
-cron.schedule('0 0 * * *', processRebirthBonuses); // Example: Every minute
+cron.schedule('0 0 * * *', processRebirthBonuses); 
 
-// const dbConfig = {
+// const pgPool = new Pool({
+//     user: 'surya',
 //     host: 'localhost',
-//     user: 'root',
-//     password: '',
 //     database: 'Aghan',
-// };
+//     password: 'surya123',
+//     port: 5432,
+// });
 
 const pgPool = new Pool({
     user: 'surya',
-    host: 'localhost',
+    host: 'database-1.cbcm2uwoiait.ap-south-1.rds.amazonaws.com',
     database: 'Aghan',
-    password: 'surya123',
+    password: 'suryaprakash123',
     port: 5432,
+    ssl: {
+        rejectUnauthorized: false, 
+    },
 });
 
-// const dbConfig = {
-//     host: 'aghan.cpo2mkusmn5r.eu-north-1.rds.amazonaws.com',
-//     user: 'admin',
-//     password: 'Admin123',
-//     database: 'aghan',
-//     port: 3306
-// };
-
-
-// const pool = mysql.createPool(dbConfig);
 
 async function query(text, params) {
     const start = Date.now()
@@ -157,11 +152,128 @@ app.post('/send-otp', async (req, res) => {
             from: 'dirssp2002@gmail.com',
             to: email,
             subject: 'Your OTP for Verification (Aghan Promoters)',
-            html: `      <div style="color: black; text-align: center; font-size: 120%">
-                                                Your Verification Code :
-                                                <span style="background-color: #f15529; color: white; padding: 5px; border-radius: 5px;"><b>${otp}</b></span>
-                                            </div>
-                                      `
+            html: `<table width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td align="center" bgcolor="#ffffff">
+                        <table width="600" cellpadding="0" cellspacing="0" border="0">
+                            <tr>
+                                <td align="center" bgcolor="#000000">
+                                    <div style="width: 100%; max-width: 600px; height: 100px; background-color: #091023; display: table;">
+                                        <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                            <tr>
+                                                <td align="start" style="width: 100%; height: 100%">
+                                                    <img src="https://i.ibb.co/bvY6L8Y/aghan-logo-english.png" width="30%" style="display: block; margin: 0 auto" alt="Logo" />
+                                                </td>
+                                            </tr>
+                                        </table>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="center" bgcolor="#ffffff">
+                        <div style="width: 100%; max-width: 600px; height: 500px; background-color: white; display: table;">
+                            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 90px">
+                                <tr>
+                                    <td align="center" style="width: 60%; height: 100%">
+                                        <p style="color: black; text-align: center; font-size: 160%"><b>Welcome to</b></p>
+                                        <p style="color: black; text-align: center; font-size: 160%"><b>AGHAN PROMOTERS</b></p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="width: 60%; height: 100%">
+                                        <p style="color: black; text-align: center; font-size: 120%">Verification code for Registration</p>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="width: 60%; height: 100%">
+                                        <div style="color: black; text-align: center; font-size: 120%">
+                                            Your Verification Code :
+                                            <span style="background-color: #f15529; color: white; padding: 5px; border-radius: 5px;"><b>${otp}</b></span>
+                                        </div>
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td align="center" style="width: 60%; height: 100%">
+                                        <p style="color: black; text-align: center; font-size: 120%">Please don't share with anyone</p>
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+                <tr>
+                    <td align="center" bgcolor="#ffffff">
+                        <div style="width: 100%; max-width: 600px; height: 100px; background-color: #39afa8; display: table; padding-bottom: 20px;">
+                            <div>
+                                <p style="color: white; font-size: 150%"><b>JOIN OUR TEAM</b></p>
+                            </div>
+                            <div>
+                                <p style="color: white; font-size: 100%">Check our Aghan Promoters Blog for new publications</p>
+                            </div>
+                            <div>
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                    <tr align="center">
+                                        <td>
+                                            <a href="https://www.facebook.com/profile.php?id=61557114009922"><img src="https://i.ibb.co/4Z0LDK9/1.png" width="8%" style="display: block; margin: 0 auto" alt="Logo" /></a>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div>
+                                <p style="color: white; font-size: 100%">Click here to share your Aghan Promoters story, photos, and videos with the world!</p>
+                            </div>
+                            <div>
+                                <p style="color: white; font-size: 160%"><b>AGHAN PROMOTERS LLP</b></p>
+                            </div>
+                            <div>
+                                <p style="color: white; font-size: 105%">NO.1/198, Middle Street, Kiliyur & Post, Ulundurpet Taluk,</p>
+                            </div>
+                            <div>
+                                <p style="color: white; font-size: 105%">Kallakurichi District, Tamilnadu, India - 606102</p>
+                            </div>
+                            <div style="padding-top: 20px">
+                                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                    <tr style="font-size: 100%" align="center">
+                                        <td style="width: 33.33%">
+                                            <a style="text-decoration: none; color: black" href="https://aghan.in/">
+                                                <img src="https://i.ibb.co/cYMpqRK/8.png" width="30" height="30" alt="Logo" />
+                                            </a>
+                                        </td>
+                                        <td style="width: 33.33%">
+                                            <a style="text-decoration: none; color: black" href="tel:+917598818884">
+                                                <img src="https://i.ibb.co/0KPCM7c/9.png" width="30" height="30" alt="Logo" />
+                                            </a>
+                                        </td>
+                                        <td style="width: 33.33%">
+                                            <a style="text-decoration: none; color: black" href="https://aghan.in/">
+                                                <img src="https://i.ibb.co/Sw9FdSc/10.png" width="30" height="30" alt="Logo" />
+                                            </a>
+                                        </td>
+                                    </tr>
+                                    <tr style="font-size: 90%" align="center">
+                                        <td style="width: 33.33%">
+                                            <a style="text-decoration: none; color: black;" href="https://aghan.in/"><b>https://aghan.in/</b></a>
+                                        </td>
+                                        <td style="width: 33.33%">
+                                            <a style="text-decoration: none; color: black;" href="mailto:support@aghan.in"><b>support@aghan.in</b></a>
+                                        </td>
+                                        <td style="width: 33.33%">
+                                            <br />
+                                            <a style="text-decoration: none; color: black;" href="tel:+917598818884"><b>+91 75988 18884</b></a>
+                                            <br />
+                                            <a style="text-decoration: none; color: black;" href="tel:+917598818885"><b>+91 75988 18885</b></a>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        `
         };
 
         await transporter.sendMail(mailOptions);
@@ -772,7 +884,123 @@ async function sendBoardUpgradeEmail(userId, boardType) {
             from: 'dirssp2002@gmail.com', // Replace with your email
             to: userEmail,
             subject: `Congratulations! You've Upgraded to ${boardType} Board!`,
-            html: `Your account has been upgraded to the ${boardType} Board. Thank you!`, // Customize the message
+            html: `
+                <table width="100%" cellpadding="0" cellspacing="0" border="0">
+    <tr>
+        <td align="center" bgcolor="#ffffff">
+            <table width="600" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                    <td align="center" bgcolor="#000000">
+                        <div style="width: 100%; max-width: 600px; height: 100px; background-color: #091023; display: table;">
+                            <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                                <tr>
+                                    <td align="start" style="width: 100%; height: 100%">
+                                        <img src="https://i.ibb.co/bvY6L8Y/aghan-logo-english.png" width="30%" style="display: block; margin: 0 auto" alt="Logo" />
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </td>
+                </tr>
+            </table>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" bgcolor="#ffffff">
+            <div style="width: 100%; max-width: 600px; height: auto; background-color: white; display: table;">
+                <table width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top: 90px">
+                    <tr>
+                        <td align="center" style="width: 60%; height: 100%">
+                            <p style="color: black; text-align: center; font-size: 160%"><b>Congratulations!</b></p>
+                            <p style="color: black; text-align: center; font-size: 160%"><b>Your account has been upgraded!</b></p>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="width: 60%; height: 100%">
+                            <div style="color: black; text-align: center; font-size: 120%">
+                                You are now part of the <span style="color: #f15529; font-weight: bold;">${boardType} Board</span>.
+                            </div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td align="center" style="width: 60%; height: 100%">
+                            <p style="color: black; text-align: center; font-size: 120%">Thank you for being with us!</p>
+                        </td>
+                    </tr>
+                </table>
+            </div>
+        </td>
+    </tr>
+    <tr>
+        <td align="center" bgcolor="#ffffff">
+            <div style="width: 100%; max-width: 600px; height: 100px; background-color: #39afa8; display: table; padding-bottom: 20px;">
+                <div>
+                    <p style="color: white; font-size: 150%"><b>JOIN OUR TEAM</b></p>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 100%">Check our Aghan Promoters Blog for new publications</p>
+                </div>
+                <div>
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr align="center">
+                            <td>
+                                <a href="https://www.facebook.com/profile.php?id=61557114009922"><img src="https://i.ibb.co/4Z0LDK9/1.png" width="8%" style="display: block; margin: 0 auto" alt="Logo" /></a>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 100%">Click here to share your Aghan Promoters story, photos, and videos with the world!</p>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 160%"><b>AGHAN PROMOTERS LLP</b></p>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 105%">NO.1/198, Middle Street, Kiliyur & Post, Ulundurpet Taluk,</p>
+                </div>
+                <div>
+                    <p style="color: white; font-size: 105%">Kallakurichi District, Tamilnadu, India - 606102</p>
+                </div>
+                <div style="padding-top: 20px">
+                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
+                        <tr style="font-size: 100%" align="center">
+                            <td style="width: 33.33%">
+                                <a style="text-decoration: none; color: black" href="https://aghan.in/">
+                                    <img src="https://i.ibb.co/cYMpqRK/8.png" width="30" height="30" alt="Logo" />
+                                </a>
+                            </td>
+                            <td style="width: 33.33%">
+                                <a style="text-decoration: none; color: black" href="tel:+917598818884">
+                                    <img src="https://i.ibb.co/0KPCM7c/9.png" width="30" height="30" alt="Logo" />
+                                </a>
+                            </td>
+                            <td style="width: 33.33%">
+                                <a style="text-decoration: none; color: black" href="https://aghan.in/">
+                                    <img src="https://i.ibb.co/Sw9FdSc/10.png" width="30" height="30" alt="Logo" />
+                                </a>
+                            </td>
+                        </tr>
+                        <tr style="font-size: 90%" align="center">
+                            <td style="width: 33.33%">
+                                <a style="text-decoration: none; color: black;" href="https://aghan.in/"><b>https://aghan.in/</b></a>
+                            </td>
+                            <td style="width: 33.33%">
+                                <a style="text-decoration: none; color: black;" href="mailto:support@aghan.in"><b>support@aghan.in</b></a>
+                            </td>
+                            <td style="width: 33.33%">
+                                <br />
+                                <a style="text-decoration: none; color: black;" href="tel:+917598818884"><b>+91 75988 18884</b></a>
+                                <br />
+                                <a style="text-decoration: none; color: black;" href="tel:+917598818885"><b>+91 75988 18885</b></a>
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            </div>
+        </td>
+    </tr>
+</table>
+            `
         };
 
         await transporter.sendMail(mailOptions);
@@ -1856,6 +2084,7 @@ app.post('/login', async (req, res) => {
 
 app.post('/admin/login', async (req, res) => {
     const client = await pgPool.connect();
+    console.log(client)
     try {
         const { id, password } = req.body;
         console.log(id, password)
@@ -2360,7 +2589,7 @@ async function scheduleBonus(userId, rebirthId, expiryDate) {
                 const { level1Count, level2Count } = await countReferralsFromMemberN(rebirthId, client);
                 await client.query(
                     'INSERT INTO achieved_users (user_id, level1_count, level2_count,status) VALUES ($1, $2, $3)',
-                    [userId, level1Count, level2Count,'E-BIKE Achieved']
+                    [userId, level1Count, level2Count, 'E-BIKE Achieved']
                 );
 
             } else {
@@ -5071,65 +5300,99 @@ app.get('/level-income', authenticateToken, async (req, res) => {
         const searchTerm = req.query.search || '';
         const offset = (page - 1) * pageSize;
 
-        const boardJoinIncomeQuery = `
-            SELECT 
-                wt.transactionid,
-                wt.transactiondate AS transaction_date,
-                wt.amount,
-                CASE
-                    WHEN wt.transactiontype = 'SILVER_BOARD_JOIN' THEN 'Silver Board Join'
-                    WHEN wt.transactiontype = 'GOLD_BOARD_JOIN' THEN 'Gold Board Join'
-                    WHEN wt.transactiontype = 'DIAMOND_BOARD_JOIN' THEN 'Diamond Board Join'
-                    WHEN wt.transactiontype = 'PLATINUM_BOARD_JOIN' THEN 'Platinum Board Join'
-                    WHEN wt.transactiontype = 'KING_BOARD_JOIN' THEN 'King Board Join'
-                    ELSE wt.transactiontype
-                END AS board_join_type,
-                u.username AS member_username,
-                u.user_id AS member_id,
-                f.username AS from_username,  -- Added username from 'fromid'
-                f.user_id AS from_userid      -- Added user_id from 'fromid'
-            FROM wallettransactions wt
-            JOIN users u ON wt.toid = u.user_id
-            JOIN users f ON wt.fromid = f.user_id 
-            WHERE wt.transactiontype LIKE '%_BOARD_JOIN'
-              AND wt.toid = $1
-              AND (LOWER(u.username) LIKE LOWER($2) OR LOWER(u.user_id) LIKE LOWER($3))
-            ORDER BY wt.transactiondate DESC
-            LIMIT $4 OFFSET $5;
-        `;
 
-        const values = [userId, `%${searchTerm}%`, `%${searchTerm}%`, pageSize, offset];
-        const { rows: boardJoinIncome } = await client.query(boardJoinIncomeQuery, values);
+        const levelIncomeData = await calculateLevelIncome(userId, client); // Call new function
+        const totalCount = levelIncomeData.length;
+        const paginatedLevelIncome = levelIncomeData.slice(offset, offset + pageSize);
 
-        // ... (totalCountQuery remains the same) ...
-        const totalCountQuery = `
-            SELECT COUNT(*) AS total
-            FROM wallettransactions wt
-            JOIN users u ON wt.toid = u.user_id
-            WHERE wt.transactiontype LIKE '%_BOARD_JOIN'
-              AND wt.toid = $1
-              AND (LOWER(u.username) LIKE LOWER($2) OR LOWER(u.user_id) LIKE LOWER($3));
-        `;
+        res.json({ levelIncome: paginatedLevelIncome, pagination: { currentPage: page, pageSize, totalCount } });
 
-        const totalCountValues = [userId, `%${searchTerm}%`, `%${searchTerm}%`];
-        const { rows: totalCountResult } = await client.query(totalCountQuery, totalCountValues);
-        const totalCount = parseInt(totalCountResult[0].total, 10);
-
-        res.json({
-            boardJoinIncome,
-            pagination: {
-                currentPage: page,
-                pageSize: pageSize,
-                totalCount: totalCount
-            }
-        });
     } catch (error) {
-        console.error('Error fetching board join income:', error);
-        res.status(500).json({ message: 'Failed to fetch board join income.' });
+        console.error('Error fetching level income data:', error);
+        res.status(500).json({ message: 'Failed to fetch level income data', error: error.detail });
     } finally {
         client.release();
     }
 });
+
+
+async function calculateLevelIncome(userId, client) {
+    try {
+        const levelIncomeData = [];
+        const boardTypes = ['Silver', 'Gold', 'Diamond', 'Platinum', 'King']; // Array of board types
+
+        for (const boardType of boardTypes) {
+            const boardGenealogyTable = `${boardType.toLowerCase()}boardgenealogy`;
+            const levelIncomesForBoard = await calculateLevelIncomeForBoard(userId, boardType, boardGenealogyTable, client);
+            levelIncomeData.push(...levelIncomesForBoard); //Combine incomes from all boards
+        }
+
+        return levelIncomeData;
+    } catch (error) {
+        console.error('Error calculating level income:', error);
+        throw error;
+    }
+}
+
+
+
+async function calculateLevelIncomeForBoard(userId, boardType, boardGenealogyTable, client) {
+    const levelIncomes = [];
+    try {
+        const { rows: genealogyRows } = await client.query(
+            `SELECT * FROM ${boardGenealogyTable} WHERE user_id = $1`,
+            [userId]
+        );
+
+        if (!genealogyRows || genealogyRows.length === 0) {
+            return []; // Handle cases where genealogy data is missing
+        }
+
+        const genealogyData = genealogyRows[0];
+        const referrals = [];
+
+        for (let level = 1; level <= 6; level++) {
+            const memberIds = getReferralsAtLevelFromGenealogy(genealogyData, level); // Helper function (below)
+            referrals.push(...memberIds); //Add referrals from all levels
+        }
+
+        if (referrals.length > 0) {
+            const referralIds = referrals.map(referral => client.escapeLiteral(referral)).join(',');
+            const { rows } = await client.query(`
+                SELECT 
+                    SUM(wt.amount) as total_amount, 
+                    COUNT(*) as total_id, 
+                    MAX(wt.transactiondate) AS max_date,
+                    wt.toid
+                FROM wallettransactions wt
+                WHERE toid IN (${referralIds})
+                    AND wt.transactiontype LIKE '%_BOARD_LEVEL_INCOME' --Filter for board level incomes
+                GROUP BY wt.toid;
+            `);
+
+            rows.forEach(row => {
+                levelIncomes.push({
+                    member: row.toid,
+                    totalAmount: row.total_amount,
+                    totalIds: row.total_id,
+                    date: row.max_date,
+                    view: true //or some way to show more details.
+                });
+            });
+        }
+
+
+        return levelIncomes;
+    } catch (error) {
+        console.error(`Error calculating level income for ${boardType}:`, error);
+        throw error;
+    }
+}
+
+function getReferralsAtLevelFromGenealogy(genealogyData, level) {
+    const memberKey = `member${level}`;
+    return genealogyData[memberKey] ? [genealogyData[memberKey]] : [];
+}
 
 app.get('/tree-view', authenticateToken, async (req, res) => {
     const client = await pgPool.connect();
@@ -7332,13 +7595,12 @@ app.get('/referrer-link', authenticateToken, async (req, res) => {
     const client = await pgPool.connect();
     try {
         const userId = req.user.userId;
-        // Check if the user exists
         const { rows } = await client.query('SELECT user_id FROM users WHERE user_id = $1', [userId]);
         if (rows.length === 0) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const referrerLink = `C:/Users/sspsu/Desktop/aghan/Aghan-User/Register.html?introducerId=${userId}`;
+        const referrerLink = `https://aghan-user.netlify.app/register?introducerId=${userId}`;
         res.json({ referrerLink });
     } catch (error) {
         console.error('Error generating referrer link:', error);
@@ -7763,6 +8025,840 @@ app.get('/genealogy/:userId/:level', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error fetching genealogy members:', error);
         res.status(500).json({ message: 'Failed to fetch genealogy members.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/withdraw-deduction', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const { rows } = await client.query(
+            'SELECT deduction_amount FROM withdraw_deductions ORDER BY id DESC LIMIT 1'
+        );
+
+        if (rows.length === 0) {
+            return res.status(200).json({ deduction_amount: 0, message: 'No deduction amount found. Please set a deduction amount.' }); // Handle no deduction yet
+        }
+
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error fetching withdrawal deduction:', error);
+        res.status(500).json({ message: 'Failed to fetch withdrawal deduction.' });
+    } finally {
+        client.release();
+    }
+});
+
+
+// Route to UPDATE/SET the withdrawal deduction
+app.put('/withdraw-deduction', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const { deduction_amount } = req.body;
+
+        // Input validation
+        if (deduction_amount === undefined || isNaN(parseFloat(deduction_amount)) || parseFloat(deduction_amount) < 0 || parseFloat(deduction_amount) > 1) {
+            return res.status(400).json({ error: 'Invalid deduction amount.  Must be a number between 0 and 1 (inclusive).' });
+        }
+
+        await client.query('BEGIN'); // Start transaction
+
+        try {
+            // Check if any withdrawal deduction exists and update if found, otherwise insert a new one.
+            const checkResult = await client.query(
+                'SELECT id FROM withdraw_deductions ORDER BY id DESC LIMIT 1'
+            );
+
+            if (checkResult.rows.length > 0) {
+                // Update existing withdrawal deduction
+                await client.query(
+                    'UPDATE withdraw_deductions SET deduction_amount = $1 WHERE id = $2',
+                    [deduction_amount, checkResult.rows[0].id]
+                );
+                console.log(`Withdrawal deduction updated to ${deduction_amount}`);
+                res.json({ message: 'Withdrawal deduction updated successfully.' });
+            } else {
+                // Insert new withdrawal deduction record
+                await client.query(
+                    'INSERT INTO withdraw_deductions (deduction_amount) VALUES ($1)',
+                    [deduction_amount]
+                );
+                console.log(`Withdrawal deduction set to ${deduction_amount}`);
+                res.json({ message: 'Withdrawal deduction set successfully.' });
+            }
+
+            await client.query('COMMIT');
+        } catch (updateError) {
+            await client.query('ROLLBACK');
+            console.error('Error updating or inserting withdrawal deduction:', updateError);
+            res.status(500).json({ error: 'Failed to save withdrawal deduction.' });
+        }
+
+    } catch (error) {
+        console.error('Error processing withdrawal deduction:', error);
+        res.status(500).json({ error: 'Failed to process withdrawal deduction.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/update-profile/:userId', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+        const { username, email, mobile, aadhaar_number, pan_number } = req.body;
+        console.log(req.body)
+        // Input validation (Add more robust validation as needed)
+        if (!username || !email || !mobile) {
+            return res.status(400).json({ error: 'Full name, email, and phone number are required.' });
+        }
+
+        // Email validation
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+            return res.status(400).json({ error: 'Invalid email address format.' });
+        }
+
+        // Phone number validation (adapt to your format)
+        if (!/^\d{10}$/.test(mobile)) {
+            return res.status(400).json({ error: 'Invalid phone number format.' });
+        }
+
+        await client.query('BEGIN'); // Start transaction
+
+        try {
+            await client.query(
+                `UPDATE users 
+                 SET username = $1, email = $2, mobile = $3, aadhaar_number = $4, pan_number = $5
+                 WHERE user_id = $6`,
+                [username, email, mobile, aadhaar_number, pan_number, userId]
+            );
+            await client.query('COMMIT');
+            res.json({ message: 'User profile updated successfully.' });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error updating user profile:', error);
+            //Handle specific error codes (e.g., unique constraint violation for email)
+            if (error.code === '23505') {
+                return res.status(409).json({ error: 'Email already exists.' });
+            }
+            res.status(500).json({ error: 'Failed to update user profile.' });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Error updating user profile:', error);
+        res.status(500).json({ error: 'Failed to update user profile.' });
+    }
+});
+
+
+
+// Route to update user address information
+app.put('/update-address/:userId', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+        const { address, street, city, state, country, pincode } = req.body;
+
+        // Input validation (Add more robust validation as needed)
+        if (!address || !street || !city || !state || !country || !pincode) {
+            return res.status(400).json({ error: 'All address fields are required.' });
+        }
+
+        await client.query('BEGIN');
+        try {
+            await client.query(
+                `UPDATE users 
+                 SET address = $1, street = $2, city = $3, state = $4, country = $5, zipcode = $6
+                 WHERE user_id = $7`,
+                [address, street, city, state, country, pincode, userId]
+            );
+
+            await client.query('COMMIT');
+            res.json({ message: 'User address updated successfully.' });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error updating user address:', error);
+            res.status(500).json({ error: 'Failed to update user address.' });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Error updating user address:', error);
+        res.status(500).json({ error: 'Failed to update user address.' });
+    }
+});
+
+app.put('/update-password/:userId', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+        const { newPassword, confirmPassword, newTransactionPassword, confirmTransactionPassword } = req.body;
+
+        // Input validation
+        if (!newPassword || !confirmPassword || newPassword !== confirmPassword) {
+            return res.status(400).json({ error: 'New passwords do not match.' });
+        }
+        if (newTransactionPassword && confirmTransactionPassword && newTransactionPassword !== confirmTransactionPassword) {
+            return res.status(400).json({ error: 'New transaction passwords do not match.' });
+        }
+
+        await client.query('BEGIN'); // Start transaction
+
+        try {
+            let updateQuery = 'UPDATE users SET ';
+            const updateValues = [];
+            let valueIndex = 1;
+
+            if (newPassword) {
+                updateQuery += `password = $${valueIndex++}, `;
+                updateValues.push(newPassword);
+            }
+            if (newTransactionPassword) {
+                updateQuery += `transaction_password = $${valueIndex++}, `;
+                updateValues.push(newTransactionPassword);
+            }
+            // Remove trailing comma and space if necessary
+            if (updateQuery.endsWith(', ')) {
+                updateQuery = updateQuery.slice(0, -2);
+            }
+
+            if (updateQuery === 'UPDATE users SET ') { //Nothing to update
+                return res.status(400).json({ error: 'No password to update.' });
+            }
+
+            updateQuery += ` WHERE user_id = $${valueIndex}`;
+            updateValues.push(userId);
+
+            await client.query(updateQuery, updateValues);
+            await client.query('COMMIT');
+            res.json({ message: 'User password(s) updated successfully.' });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error updating user password:', error);
+            res.status(500).json({ error: 'Failed to update user password(s).' });
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error('Error updating user password:', error);
+        res.status(500).json({ error: 'Failed to update user password(s).' });
+    }
+});
+
+app.get('/bank-details/:userId', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+
+        const { rows } = await client.query(
+            'SELECT * FROM banks WHERE user_id = $1',
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(200).json({ bank_details: null, message: 'No bank details found for this user.' }); //More user-friendly message
+        }
+
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error fetching bank details:', error);
+        res.status(500).json({ error: 'Failed to fetch bank details.' });
+    } finally {
+        client.release();
+    }
+});
+
+// Route to update bank details for a specific user
+app.put('/bank-details/:userId', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+        const { account_holder_name, account_number, bank_name, bank_ifsc, bank_branch } = req.body;
+
+        // Input validation
+        if (!account_holder_name || !account_number || !bank_name || !bank_ifsc || !bank_branch) {
+            return res.status(400).json({ error: 'All fields are required.' });
+        }
+
+        await client.query('BEGIN');
+        try {
+            // Check if a bank record for this user already exists. Update or insert
+            const checkResult = await client.query(
+                'SELECT account_id FROM banks WHERE user_id = $1',
+                [userId]
+            );
+
+            if (checkResult.rows.length > 0) {
+                // Update existing bank details
+                await client.query(
+                    'UPDATE banks SET account_holder_name = $1, account_number = $2, bank_name = $3, bank_ifsc = $4, bank_branch = $5 WHERE user_id = $6',
+                    [account_holder_name, account_number, bank_name, bank_ifsc, bank_branch, userId]
+                );
+                console.log(`Bank details updated for user ${userId}`);
+                res.json({ message: 'Bank details updated successfully.' });
+            } else {
+                // Insert new bank details
+                const newAccountId = uuidv4();
+                await client.query(
+                    'INSERT INTO banks (account_id, user_id, account_holder_name, account_number, bank_name, bank_ifsc, bank_branch) VALUES ($1, $2, $3, $4, $5, $6, $7)',
+                    [newAccountId, userId, account_holder_name, account_number, bank_name, bank_ifsc, bank_branch]
+                );
+                console.log(`Bank details inserted for user ${userId}`);
+                res.json({ message: 'Bank details saved successfully.' });
+            }
+
+            await client.query('COMMIT');
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error updating or inserting bank details:', error);
+            // Handle specific error codes (e.g., unique constraint violation)
+            if (error.code === '23505') {
+                return res.status(409).json({ error: 'Account number or bank IFSC already exists.' });
+            }
+            res.status(500).json({ error: 'Failed to save bank details.' });
+        }
+    } catch (error) {
+        console.error('Error processing bank details:', error);
+        res.status(500).json({ error: 'Failed to process bank details.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/upi-details/:userId', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+
+        const { rows } = await client.query(
+            'SELECT * FROM upis WHERE user_id = $1',
+            [userId]
+        );
+
+        if (rows.length === 0) {
+            return res.status(200).json({ upi_details: null, message: 'No UPI details found for this user.' });
+        }
+
+        res.json(rows[0]);
+    } catch (error) {
+        console.error('Error fetching UPI details:', error);
+        res.status(500).json({ error: 'Failed to fetch UPI details.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/upi-details/:userId', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.params.userId;
+        const { googlepay, phonpe, paytm } = req.body; // Only these fields are required now
+
+        // Input validation (More robust validation is recommended for production)
+        const phoneRegex = /^\d{10}$/; // Adjust regex as needed for your phone number format
+        if (googlepay && !phoneRegex.test(googlepay)) {
+            return res.status(400).json({ error: 'Invalid Google Pay number.' });
+        }
+        if (phonpe && !phoneRegex.test(phonpe)) {
+            return res.status(400).json({ error: 'Invalid PhonePe number.' });
+        }
+        if (paytm && !phoneRegex.test(paytm)) {
+            return res.status(400).json({ error: 'Invalid PayTM number.' });
+        }
+
+        await client.query('BEGIN'); // Start transaction
+        try {
+            // Check if UPI details exist for the user; update or insert
+            const checkResult = await client.query(
+                'SELECT upi_id FROM upis WHERE user_id = $1',
+                [userId]
+            );
+
+            if (checkResult.rows.length > 0) {
+                // Update existing UPI details (only if values are provided)
+                let updateQuery = 'UPDATE upis SET ';
+                const updateValues = [];
+                let valueIndex = 1;
+
+                if (googlepay) {
+                    updateQuery += `googlepay = $${valueIndex++}, `;
+                    updateValues.push(googlepay);
+                }
+                if (phonpe) {
+                    updateQuery += `phonpe = $${valueIndex++}, `;
+                    updateValues.push(phonpe);
+                }
+                if (paytm) {
+                    updateQuery += `paytm = $${valueIndex++}, `;
+                    updateValues.push(paytm);
+                }
+
+                if (updateQuery === 'UPDATE upis SET ') { //Nothing to update
+                    return res.status(200).json({ message: 'No UPI details to update' });
+                }
+
+                updateQuery = updateQuery.substring(0, updateQuery.length - 2); // Remove trailing comma and space
+                updateQuery += ` WHERE user_id = $${valueIndex}`;
+                updateValues.push(userId);
+
+                await client.query(updateQuery, updateValues);
+                console.log(`UPI details updated for user ${userId}`);
+                res.json({ message: 'UPI details updated successfully.' });
+            } else {
+                // Insert new UPI details (only if at least one value provided)
+                if (!googlepay && !phonpe && !paytm) {
+                    return res.status(400).json({ error: 'At least one UPI number is required.' });
+                }
+                const newUpiId = uuidv4();
+                await client.query(
+                    `INSERT INTO upis (upi_id, user_id, googlepay, phonpe, paytm) VALUES ($1, $2, $3, $4, $5)`,
+                    [newUpiId, userId, googlepay, phonpe, paytm]
+                );
+                console.log(`UPI details inserted for user ${userId}`);
+                res.json({ message: 'UPI details saved successfully.' });
+            }
+
+            await client.query('COMMIT'); // Commit the transaction
+        } catch (error) {
+            await client.query('ROLLBACK'); // Rollback on error
+            console.error('Error updating or inserting UPI details:', error);
+            res.status(500).json({ error: 'Failed to save UPI details.' });
+        }
+    } catch (error) {
+        console.error('Error processing UPI details:', error);
+        res.status(500).json({ error: 'Failed to process UPI details.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/filteredMemberList', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const searchTerm = req.query.search || '';
+        const fromDate = req.query.fromDate || '';
+        const toDate = req.query.toDate || '';
+        const offset = (page - 1) * pageSize;
+
+        let whereClause = 'WHERE role != \'admin\''; // Base condition
+        const queryParams = [];
+        let paramIndex = 1;
+
+        if (searchTerm) {
+            whereClause += ` AND (LOWER(username) LIKE LOWER($${paramIndex++}) OR LOWER(user_id) LIKE LOWER($${paramIndex++}))`;
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`);
+        }
+
+        if (fromDate) {
+            whereClause += ` AND created_at >= $${paramIndex++}`;
+            queryParams.push(fromDate);
+        }
+
+        if (toDate) {
+            whereClause += ` AND created_at <= $${paramIndex++}`;
+            queryParams.push(toDate);
+        }
+
+        //Main Query
+        const query = `
+            SELECT 
+                COUNT(*) OVER () AS total_count,
+                user_id, 
+                username, 
+                introducer_id, 
+                (SELECT COUNT(*) FROM users WHERE introducer_id = users.user_id) as referral_count,
+                mobile, 
+                password, 
+                transaction_password, 
+                status, 
+                country, 
+                email, 
+                created_at,
+                lock_status,
+                withdrawal_lock_status
+            FROM users
+            ${whereClause}
+            ORDER BY id ASC
+            LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
+        `;
+        queryParams.push(pageSize, offset);
+
+        const { rows } = await client.query(query, queryParams);
+        const totalCount = rows.length > 0 ? rows[0].total_count : 0;
+        const paginatedMembers = rows.map(member => {
+            delete member.total_count;
+            return member;
+        });
+
+        res.json({ members: paginatedMembers, totalCount, currentPage: page, pageSize });
+
+    } catch (error) {
+        console.error('Error fetching filtered member list:', error);
+        res.status(500).json({ message: 'Failed to fetch filtered member list.' });
+    } finally {
+        client.release();
+    }
+});
+app.get('/download/excel', authenticateToken, async (req, res) => {
+    try {
+        const { data } = await fetch(`http://localhost:5000/filteredMemberList?${createQueryString(req.query)}`, {
+            headers: {
+                'Authorization': req.headers.authorization
+            }
+        });
+        const members = data.members;
+        console.log(members)
+        const worksheetData = members.map((member, index) => ({
+            'S.NO': index + 1,
+            'Member': member.username,
+            'Email': member.email,
+            'Mobile': member.mobile,
+            'Pass': member.password,
+            'S.Pass': member.transaction_password,
+            'Status': member.status,
+            'Referral': member.introducer_id,
+            'Date of Join': member.created_at
+        }));
+
+        const worksheet = xlsx.utils.json_to_sheet(worksheetData);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Members');
+        const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=members.xlsx');
+        res.send(excelBuffer);
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        res.status(500).send('Error generating Excel file');
+    }
+});
+app.get('/download/pdf', authenticateToken, async (req, res) => {
+    try {
+        const response = await fetch(`http://localhost:5000/filteredMemberList?${createQueryString(req.query)}`, {
+            headers: {
+                'Authorization': req.headers.authorization
+            }
+        });
+        console.log(response)
+        const members = response.data.members;
+        console.log(members)
+        const doc = new jsPDF();
+        doc.setFontSize(12);
+        doc.text('Member List', 10, 10);
+        doc.autoTable({
+            head: [['S.NO', 'Member', 'Email', 'Mobile', 'Pass', 'S.Pass', 'Status', 'Referral', 'Date of Join']],
+            body: members.map((member, index) => [index + 1, member.username, member.email, member.mobile, member.password, member.transaction_password, member.status, member.introducer_id, member.created_at]),
+            columnStyles: {
+                'Date of Join': {
+                    halign: 'center'
+                }
+            }
+        });
+
+        const pdfBuffer = doc.output('blob');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename=members.pdf');
+        res.send(pdfBuffer);
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        res.status(500).send('Error generating PDF file');
+    }
+});
+
+//Helper Function
+function createQueryString(query) {
+    let queryString = '';
+    if (query.fromDate) queryString += `fromDate=${query.fromDate}&`;
+    if (query.toDate) queryString += `toDate=${query.toDate}&`;
+    if (query.search) queryString += `search=${query.search}&`;
+    return queryString.slice(0, -1);
+}
+
+app.get('/payout', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.user.userId;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+        const offset = (page - 1) * pageSize;
+        const searchTerm = req.query.search || "";
+
+        let query = `SELECT * FROM payout_table WHERE user_id = $1`;
+        const queryParams = [userId];
+
+        if (searchTerm) {
+            query += ` AND (member ILIKE $${queryParams.length + 1} OR mobile ILIKE $${queryParams.length + 2} OR amount::text ILIKE $${queryParams.length + 3})`;
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`); // Use ILIKE for case-insensitive search
+        }
+
+        query += ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(pageSize, offset);
+
+        const { rows: payouts } = await client.query(query, queryParams);
+
+        let countQuery = `SELECT COUNT(*) AS total FROM payout_table WHERE user_id = $1`;
+        const countQueryParams = [userId];
+        if (searchTerm) {
+            countQuery += ` AND (member ILIKE $${countQueryParams.length + 1} OR mobile ILIKE $${countQueryParams.length + 2} OR amount::text ILIKE $${countQueryParams.length + 3})`;
+            countQueryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
+        const { rows: countResult } = await client.query(countQuery, countQueryParams);
+        const totalCount = parseInt(countResult[0].total, 10);
+
+        res.json({ payout: payouts, pagination: { currentPage: page, pageSize, totalCount } });
+    } catch (error) {
+        console.error('Error fetching payout data:', error);
+        res.status(500).json({ message: 'Failed to fetch payout data', error: error.detail }); // Include error details
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/paidIncome', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.user.userId;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+        const offset = (page - 1) * pageSize;
+        const searchTerm = req.query.search || '';
+
+        let query = `SELECT * FROM payout_table WHERE user_id = $1 AND status='Paid'`; // Assuming paid_income table
+        const queryParams = [userId];
+
+        if (searchTerm) {
+            query += ` AND (member ILIKE $${queryParams.length + 1})`; // Adjust column names as needed
+            queryParams.push(`%${searchTerm}%`);
+        }
+
+        query += ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(pageSize, offset);
+
+        const result = await client.query(query, queryParams);
+        const payouts = result.rows;
+
+        const countQuery = `SELECT COUNT(*) AS total FROM payout_table WHERE user_id = $1 AND status='Paid' ${searchTerm ? `AND (member ILIKE $2)` : ''}`;
+        const countQueryParams = searchTerm ? [userId, `%${searchTerm}%`] : [userId];
+        const countResult = await client.query(countQuery, countQueryParams);
+        const totalCount = parseInt(countResult.rows[0].total, 10);
+
+        res.json({ paidIncome: payouts, pagination: { currentPage: page, pageSize, totalCount } });
+    } catch (error) {
+        console.error('Error fetching paid income data:', error);
+        res.status(500).json({ message: 'Failed to fetch paid income data', error: error.detail });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/unpaidIncome', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.user.userId;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+        const offset = (page - 1) * pageSize;
+        const searchTerm = req.query.search || '';
+
+        let query = `SELECT * FROM payout_table WHERE user_id = $1 AND status = 'Pending'`;
+        const queryParams = [userId];
+
+        if (searchTerm) {
+            query += ` AND (member ILIKE $${queryParams.length + 1} OR mobile ILIKE $${queryParams.length + 2} OR amount::text ILIKE $${queryParams.length + 3})`;
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
+
+        query += ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(pageSize, offset);
+
+        const { rows: unpaidIncomes } = await client.query(query, queryParams);
+
+        const countQuery = `SELECT COUNT(*) AS total FROM payout_table WHERE user_id = $1 AND status = 'Pending' ${searchTerm ? `AND (member ILIKE $2 OR mobile ILIKE $3 OR amount::text ILIKE $4)` : ''}`;
+        const countQueryParams = searchTerm ? [userId, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`] : [userId];
+        const { rows: countResult } = await client.query(countQuery, countQueryParams);
+        const totalCount = parseInt(countResult[0].total, 10);
+
+        res.json({ unpaidIncome: unpaidIncomes, pagination: { currentPage: page, pageSize, totalCount } });
+    } catch (error) {
+        console.error('Error fetching unpaid income data:', error);
+        res.status(500).json({ message: 'Failed to fetch unpaid income data', error: error.detail });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/rejectedIncome', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.user.userId;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+        const offset = (page - 1) * pageSize;
+        const searchTerm = req.query.search || '';
+
+        let query = `SELECT * FROM payout_table WHERE user_id = $1 AND status = 'Rejected'`;
+        const queryParams = [userId];
+
+        if (searchTerm) {
+            query += ` AND (member ILIKE $${queryParams.length + 1} OR mobile ILIKE $${queryParams.length + 2} OR amount::text ILIKE $${queryParams.length + 3})`;
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
+
+        query += ` LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(pageSize, offset);
+
+        const { rows: unpaidIncomes } = await client.query(query, queryParams);
+
+        const countQuery = `SELECT COUNT(*) AS total FROM payout_table WHERE user_id = $1 AND status = 'Rejected' ${searchTerm ? `AND (member ILIKE $2 OR mobile ILIKE $3 OR amount::text ILIKE $4)` : ''}`;
+        const countQueryParams = searchTerm ? [userId, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`] : [userId];
+        const { rows: countResult } = await client.query(countQuery, countQueryParams);
+        const totalCount = parseInt(countResult[0].total, 10);
+
+        res.json({ unpaidIncome: unpaidIncomes, pagination: { currentPage: page, pageSize, totalCount } });
+    } catch (error) {
+        console.error('Error fetching rejected payouts income data:', error);
+        res.status(500).json({ message: 'Failed to fetch unpaid income data', error: error.detail });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/api/payouts/makePaid', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const { ids } = req.body;
+
+        //Input Validation - check that the ids are integers (e.g., use parseInt)
+        if (!Array.isArray(ids) || ids.some(isNaN)) {
+            return res.status(400).json({ error: "Invalid ids provided" });
+        }
+
+        await client.query('BEGIN'); // Begin transaction
+
+        const updateQuery = `
+            UPDATE payout_table
+            SET status = 'Paid', approval_date = CURRENT_TIMESTAMP
+            WHERE id = ANY($1);
+        `;
+
+        const updateValues = [ids];
+
+        const updateResult = await client.query(updateQuery, updateValues);
+
+        if (updateResult.rowCount > 0) {
+            await client.query('COMMIT');
+            res.json({ message: `${updateResult.rowCount} payouts marked as paid.` });
+        } else {
+            await client.query('ROLLBACK');
+            res.status(404).json({ message: "No matching payouts found." })
+        }
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Error updating payouts:', error);
+        res.status(500).json({ error: 'Failed to update payouts.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/summary', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.user.userId;
+        const summary = {};
+
+        //Helper Function to handle potential NaN values
+        const handlePotentialNaN = (value) => {
+            const num = parseFloat(value);
+            return isNaN(num) ? 0.00 : num.toFixed(2); //Return 0.00 if NaN
+        }
+
+        // 1. Fund Transfer Amounts (Received)
+        const fundTransferResult = await client.query(
+            `
+            SELECT 
+                SUM(CASE WHEN toid = $1 THEN amount ELSE 0 END) as total_received
+            FROM wallettransactions
+            WHERE transactiontype = 'FUND_TRANSFER';
+        `, [userId]
+        );
+        summary.fundTransferReceived = handlePotentialNaN(fundTransferResult.rows[0].total_received);
+
+        // 2. Pending Add Funds Request Amount
+        const pendingFundsResult = await client.query(
+            `
+            SELECT SUM(amount) AS total_pending
+            FROM add_funds
+            WHERE user_id = $1 AND status = 'pending';
+        `, [userId]
+        );
+        summary.pendingFunds = handlePotentialNaN(pendingFundsResult.rows[0].total_pending);
+
+        // 3. Fetch Unpaid Income (payout_table)
+        const unpaidIncomeResult = await client.query(
+            `
+            SELECT SUM(amount) AS total_unpaid
+            FROM payout_table
+            WHERE user_id = $1 AND status IN ('Pending', 'Unpaid'); 
+        `, [userId]
+        );
+        summary.unpaidIncome = handlePotentialNaN(unpaidIncomeResult.rows[0].total_unpaid);
+
+        // 4. Fetch Paid Income (payout_table)
+        const paidIncomeResult = await client.query(
+            `
+            SELECT SUM(amount) AS total_paid
+            FROM payout_table
+            WHERE user_id = $1 AND status = 'Paid';
+        `, [userId]
+        );
+        summary.paidIncome = handlePotentialNaN(paidIncomeResult.rows[0].total_paid);
+
+        // 5. Fetch Total Earnings from Boards 
+        const totalEarningsQuery = `
+            SELECT 
+                COALESCE(SUM(earnings), 0) AS total_earnings 
+            FROM boards
+            WHERE userid = $1 AND status = 'ACTIVE';  
+        `;
+        const totalEarningsResult = await client.query(totalEarningsQuery, [userId]);
+        summary.totalEarnings = handlePotentialNaN(totalEarningsResult.rows[0].total_earnings);
+
+
+        res.json(summary);
+
+    } catch (error) {
+        console.error('Error fetching summary data:', error);
+        res.status(500).json({ message: 'Failed to fetch summary data.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/member-counts', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        // Get total member count (excluding admins)
+        const totalMembersResult = await client.query(
+            'SELECT COUNT(*) AS total_members FROM users WHERE role != \'admin\''
+        );
+        const totalMembers = parseInt(totalMembersResult.rows[0].total_members, 10);
+
+        // Get active member count
+        const activeMembersResult = await client.query(
+            'SELECT COUNT(*) AS active_members FROM users WHERE role != \'admin\' AND status = \'Active\''
+        );
+        const activeMembers = parseInt(activeMembersResult.rows[0].active_members, 10);
+
+        res.json({ totalMembers, activeMembers });
+    } catch (error) {
+        console.error('Error fetching member counts:', error);
+        res.status(500).json({ message: 'Failed to fetch member counts.' });
     } finally {
         client.release();
     }
