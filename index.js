@@ -13,7 +13,9 @@ const AWS = require('aws-sdk');
 const cron = require('node-cron');
 const { Pool } = require('pg');
 const e = require('express');
-const jsPDF = require('jspdf')
+const { jsPDF } = require('jspdf');
+require('jspdf-autotable');
+const xlsx = require('xlsx')
 require('dotenv').config()
 AWS.config.update({
     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
@@ -57,26 +59,26 @@ const PLATINUM_BOARD_LEVEL_INCOME = PLATINUM_BOARD_INCOME_THRESHOLD * BOARD_LEVE
 const KING_BOARD_LEVEL_INCOME = KING_BOARD_INCOME_THRESHOLD * BOARD_LEVEL_INCOME_PERCENTAGE;
 const SILVER_TO_GOLD_UPGRADE_AMOUNT = 10000;
 
-cron.schedule('0 0 * * *', processRebirthBonuses); 
-
-// const pgPool = new Pool({
-//     user: 'surya',
-//     host: 'localhost',
-//     database: 'Aghan',
-//     password: 'surya123',
-//     port: 5432,
-// });
+cron.schedule('0 0 * * *', processRebirthBonuses);
 
 const pgPool = new Pool({
     user: 'surya',
-    host: 'database-1.cbcm2uwoiait.ap-south-1.rds.amazonaws.com',
+    host: 'localhost',
     database: 'Aghan',
-    password: 'suryaprakash123',
+    password: 'surya123',
     port: 5432,
-    ssl: {
-        rejectUnauthorized: false, 
-    },
 });
+
+// const pgPool = new Pool({
+//     user: 'surya',
+//     host: 'database-1.cbcm2uwoiait.ap-south-1.rds.amazonaws.com',
+//     database: 'Aghan',
+//     password: 'suryaprakash123',
+//     port: 5432,
+//     ssl: {
+//         rejectUnauthorized: false, 
+//     },
+// });
 
 
 async function query(text, params) {
@@ -2283,6 +2285,66 @@ app.post('/add-funds', authenticateToken, async (req, res) => {
     }
 });
 
+app.post('/admin/add-funds', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const { userId, amount } = req.body;
+
+        // Input validation
+        if (!userId || !amount || isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+            return res.status(400).json({ message: 'Invalid user ID or amount.' });
+        }
+
+        // Check if user exists
+        const userExistsResult = await client.query('SELECT 1 FROM users WHERE user_id = $1', [userId]);
+        if (userExistsResult.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found.' });
+        }
+
+        await client.query('BEGIN'); // Start transaction
+
+        try {
+            // Insert into add_funds table with status 'approved' (since it's an admin action)
+            const addFundsResult = await client.query(
+                'INSERT INTO add_funds (user_id, amount, transaction_id, status) VALUES ($1, $2, gen_random_uuid(), $3) RETURNING id',
+                [userId, amount, 'approved']
+            );
+
+            const addFundsId = addFundsResult.rows[0].id;
+
+            //Record the transaction
+            await client.query(
+                'INSERT INTO wallettransactions (transactionid, fromid, amount, transactiontype, toid, addFundsId) VALUES (gen_random_uuid(), \'admin\', $1, \'FUND_TRANSFER\', $2, $3)',
+                [amount, userId, addFundsId]
+            );
+
+            //Update the user's fund income only AFTER the add_funds entry is successful
+            await client.query(
+                'UPDATE users SET fund_income = fund_income + $1 WHERE user_id = $2',
+                [amount, userId]
+            );
+
+
+            await client.query('COMMIT');
+            res.json({ message: 'Funds added successfully.', addFundsId });
+        } catch (error) {
+            await client.query('ROLLBACK');
+            console.error('Error adding funds:', error);
+
+            // More specific error handling (e.g., check for unique constraint violation)
+            if (error.code === '23505') {
+                res.status(409).json({ message: 'Duplicate transaction ID' }); // Or similar
+            } else {
+                res.status(500).json({ message: 'Failed to add funds.' });
+            }
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        res.status(500).json({ message: 'Failed to add funds.' });
+    } finally {
+        client.release();
+    }
+});
 
 app.get('/validate-email', async (req, res) => {
     const client = await pgPool.connect();
@@ -2309,7 +2371,7 @@ app.get('/user', authenticateToken, async (req, res) => {
         const query = `
             SELECT 
                 u.*, 
-                COALESCE(s.username, 'Aghan Promoters') AS sponsor_username,  -- Get sponsor username or default
+                COALESCE(s.username, 'Aghan Promoters') AS sponsor_username,
                 s.user_id as sponsor_id
             FROM users u
             LEFT JOIN users s ON u.introducer_id = s.user_id
@@ -2324,22 +2386,21 @@ app.get('/user', authenticateToken, async (req, res) => {
             WHERE userid = $1 AND status = 'ACTIVE'
         `, [userId]);
 
-        if (userBoards.length === 0) {
-            throw new Error('User is not active on any board.');
-        }
+        let topBoard = null; // Initialize topBoard to null
 
-        const boardHierarchy = ['silver', 'gold', 'diamond', 'platinum', 'king'];
-        const sortedBoards = userBoards.sort((a, b) => boardHierarchy.indexOf(a.boardtype) - boardHierarchy.indexOf(b.boardtype));
-        const topBoard = sortedBoards[0].boardtype;
+        if (userBoards.length > 0) {
+            const boardHierarchy = ['silver', 'gold', 'diamond', 'platinum', 'king'];
+            const sortedBoards = userBoards.sort((a, b) => boardHierarchy.indexOf(a.boardtype) - boardHierarchy.indexOf(b.boardtype));
+            topBoard = sortedBoards[0].boardtype;
+        }
 
         if (result.rowCount === 0) {
             return res.status(404).json({ success: false, message: 'User not found.' });
         }
 
         const user = result.rows[0];
-        //console.log(user);
 
-        res.json({ success: true, user: user, board: topBoard });
+        res.json({ success: true, user: user, board: topBoard }); // board will be null if no active boards
 
     } catch (error) {
         console.error('Error fetching user details:', error);
@@ -2918,6 +2979,55 @@ app.get('/my-direct', authenticateToken, async (req, res) => {
     }
 });
 
+app.get('/admin/add-funds-history', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const searchTerm = req.query.search || '';
+        const offset = (page - 1) * pageSize;
+
+        // Build the query dynamically
+        let query = `
+            SELECT 
+                COUNT(*) OVER () AS total_count,  -- Total count for pagination
+                af.id, 
+                af.user_id, 
+                u.username, 
+                af.amount, 
+                af.transaction_id, 
+                af.created_at, 
+                af.status
+            FROM add_funds af
+            JOIN users u ON af.user_id = u.user_id
+        `;
+        const queryParams = [];
+
+        if (searchTerm) {
+            query += ` WHERE LOWER(u.username) LIKE LOWER($1) OR af.transaction_id LIKE $2`;
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`);
+        } else {
+            query += ' WHERE 1=1'; //To handle where condition
+        }
+
+        query += ` ORDER BY af.created_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(pageSize, offset);
+
+        const result = await client.query(query, queryParams);
+        const totalCount = result.rows.length > 0 ? result.rows[0].total_count : 0; //Get total count from the result
+        const addFundsHistory = result.rows.map(item => {
+            delete item.total_count; //Remove unnecessary column
+            return item;
+        });
+        res.json({ addFundsHistory, totalCount, currentPage: page, pageSize });
+    } catch (error) {
+        console.error('Error fetching add funds history:', error);
+        res.status(500).json({ message: 'Failed to fetch add funds history.' });
+    } finally {
+        client.release();
+    }
+});
+
 app.get('/fund-transfer-history', authenticateToken, async (req, res) => {
     const client = await pgPool.connect();
     try {
@@ -2976,42 +3086,92 @@ app.get('/fund-transfer-history', authenticateToken, async (req, res) => {
 app.get('/pending-fund-requests', authenticateToken, authorizeAdmin, async (req, res) => {
     const client = await pgPool.connect();
     try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const offset = (page - 1) * pageSize;
+
+        const countQuery = `SELECT COUNT(*) AS total FROM add_funds WHERE status = 'pending'`;
+        const countResult = await client.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total, 10);
+        const totalPages = Math.ceil(totalCount / pageSize);
+
         const { rows } = await client.query(
-            `SELECT af.id, af.user_id, u.username, af.amount, af.transaction_id, af.created_at, af.status  FROM add_funds af JOIN users u ON af.user_id = u.user_id WHERE af.status = 'pending'`
+            `SELECT id, user_id, amount, transaction_id, created_at, status
+             FROM add_funds
+             WHERE status = 'pending'
+             LIMIT $1 OFFSET $2`,
+            [pageSize, offset]
         );
 
-        res.json(rows);
+        res.json({ requests: rows, pagination: { currentPage: page, pageSize, totalCount, totalPages } });
     } catch (error) {
         console.error('Error fetching pending fund requests:', error);
         res.status(500).json({ message: 'Failed to fetch pending fund requests.' });
+    } finally {
+        client.release();
     }
 });
 
 app.get('/approved-fund-requests', authenticateToken, authorizeAdmin, async (req, res) => {
     const client = await pgPool.connect();
     try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const offset = (page - 1) * pageSize;
+
+        //Add count query
+        const countQuery = `SELECT COUNT(*) AS total FROM add_funds af JOIN users u ON af.user_id = u.user_id WHERE af.status = 'approved'`;
+        const countResult = await client.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total, 10);
+        const totalPages = Math.ceil(totalCount / pageSize);
+
         const { rows } = await client.query(
-            `SELECT af.id, af.user_id, u.username, af.amount, af.transaction_id, af.created_at, af.status  FROM add_funds af JOIN users u ON af.user_id = u.user_id WHERE af.status = 'approved'`
+            `SELECT af.id, af.user_id, u.username, af.amount, af.transaction_id, af.created_at, af.status
+             FROM add_funds af
+             JOIN users u ON af.user_id = u.user_id
+             WHERE af.status = 'approved'
+             LIMIT $1 OFFSET $2`,
+            [pageSize, offset]
         );
 
-        res.json(rows);
+        res.json({ requests: rows, pagination: { currentPage: page, pageSize, totalCount, totalPages } }); // Send pagination data
     } catch (error) {
         console.error('Error fetching approved fund requests:', error);
         res.status(500).json({ message: 'Failed to fetch approved fund requests.' });
+    } finally {
+        client.release();
     }
 });
 
 app.get('/rejected-fund-requests', authenticateToken, authorizeAdmin, async (req, res) => {
     const client = await pgPool.connect();
     try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const offset = (page - 1) * pageSize;
+
+        //Add count query
+        const countQuery = `SELECT COUNT(*) AS total FROM add_funds af JOIN users u ON af.user_id = u.user_id WHERE af.status = 'rejected'`;
+        const countResult = await client.query(countQuery);
+        const totalCount = parseInt(countResult.rows[0].total, 10);
+        const totalPages = Math.ceil(totalCount / pageSize);
+
+
         const { rows } = await client.query(
-            `SELECT af.id, af.user_id, u.username, af.amount, af.transaction_id, af.created_at, af.status  FROM add_funds af JOIN users u ON af.user_id = u.user_id WHERE af.status = 'rejected'`
+            `SELECT af.id, af.user_id, u.username, af.amount, af.transaction_id, af.created_at, af.status
+             FROM add_funds af
+             JOIN users u ON af.user_id = u.user_id
+             WHERE af.status = 'rejected'
+             LIMIT $1 OFFSET $2`,
+            [pageSize, offset]
         );
 
-        res.json(rows);
+        res.json({ requests: rows, pagination: { currentPage: page, pageSize, totalCount, totalPages } }); // Send pagination data
     } catch (error) {
         console.error('Error fetching rejected fund requests:', error);
         res.status(500).json({ message: 'Failed to fetch rejected fund requests.' });
+    } finally {
+        client.release();
     }
 });
 
@@ -4329,35 +4489,130 @@ app.get('/level_income_plans', authenticateToken, authorizeAdmin, async (req, re
     }
 });
 
+app.post('/tickets', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const { subject, message, file } = req.body; // Assuming file is base64 encoded
+        const userId = req.user.userId; // Get userId from authentication middleware
 
+        // Input validation
+        if (!subject || subject.trim() === '' || !message || message.trim() === '') {
+            return res.status(400).json({ error: 'Subject and message are required.' });
+        }
 
-app.get('/tickets', authenticateToken, authorizeAdmin, async (req, res) => {
+        const ticketId = uuidv4();
+        let fileUrl = null;
+
+        if (file) {
+            try {
+                const base64Data = file.replace(/^data:image\/\w+;base64,/, ""); //Strip base64 header
+                const imageType = file.split(';')[0].split('/')[1]; //Get image type
+
+                const params = {
+                    Bucket: process.env.AWS_BUCKET_NAME, // S3 bucket name
+                    Key: `tickets/${ticketId}.${imageType}`,
+                    Body: Buffer.from(base64Data, 'base64'),
+                    ContentEncoding: 'base64',
+                    ContentType: `image/${imageType}`
+                };
+                const uploadResult = await s3.upload(params).promise();
+                fileUrl = uploadResult.Location;
+            } catch (s3Error) {
+                console.error('Error uploading file to S3:', s3Error);
+                // Log error but don't prevent ticket creation
+            }
+        }
+
+        const insertQuery = `
+            INSERT INTO tickets (ticket_id, user_id, subject, message, file_url, created_at)
+            VALUES ($1, $2, $3, $4, $5, NOW())`;
+        const values = [ticketId, userId, subject, message, fileUrl];
+
+        await client.query(insertQuery, values); //Execute query
+
+        res.status(201).json({ message: 'Ticket created successfully.', ticketId });
+    } catch (error) {
+        console.error('Error creating ticket:', error);
+        res.status(500).json({ error: 'Failed to create ticket.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/my-tickets', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const userId = req.user.userId;
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+        const searchTerm = req.query.search || "";
+        const offset = (page - 1) * pageSize;
+
+        //Query for open tickets for the user
+        let query = `
+            SELECT 
+                COUNT(*) OVER () AS total_count,  --Add total count for pagination
+                t.*  
+            FROM tickets t 
+            WHERE t.user_id = $1 AND t.status IS NULL  -- Only open (pending) tickets for the user
+        `;
+
+        const values = [userId];
+        if (searchTerm) {
+            query += ` AND (LOWER(t.subject) LIKE LOWER($2) OR LOWER(t.message) LIKE LOWER($2))`; //Case-insensitive search
+            values.push(`%${searchTerm}%`);
+        }
+
+        query += ` ORDER BY t.created_at DESC LIMIT $${values.length + 1} OFFSET $${values.length + 2}`;
+        values.push(pageSize, offset);
+
+        const { rows: tickets } = await client.query(query, values);
+        const totalCount = tickets.length > 0 ? tickets[0].total_count : 0;
+        const paginatedTickets = tickets.map(t => { delete t.total_count; return t; });
+
+        res.json({ tickets: paginatedTickets, totalCount, currentPage: page, pageSize });
+
+    } catch (error) {
+        console.error("Error fetching user tickets:", error);
+        res.status(500).json({ message: "Failed to fetch user tickets" });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/tickets', authenticateToken, async (req, res) => {
     const client = await pgPool.connect();
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
-        const search = req.query.search || ""; // For search functionality
+        const search = req.query.search ? req.query.search.trim() : ""; // Handle empty search
         const offset = (page - 1) * limit;
 
-        let query = 'SELECT * FROM tickets WHERE status IS NULL'; // Only pending tickets
-        let countQuery = 'SELECT COUNT(*) AS total FROM tickets WHERE status IS NULL';
-        let queryParams = [];
+        let query = 'SELECT * FROM tickets WHERE status IS NULL'; // Base query
+        let countQuery = 'SELECT COUNT(*) AS total FROM tickets WHERE status IS NULL'; // Count query
+        const queryParams = [];
+        const countParams = [];
 
+        // Add search conditions dynamically
         if (search) {
-            query += ` AND (subject LIKE $1 OR message LIKE $2)`;
-            countQuery += ` AND (subject LIKE $1 OR message LIKE $2)`;
+            query += ` AND (subject ILIKE $1 OR message ILIKE $2)`;
+            countQuery += ` AND (subject ILIKE $1 OR message ILIKE $2)`;
             queryParams.push(`%${search}%`, `%${search}%`);
+            countParams.push(`%${search}%`, `%${search}%`);
         }
 
-        query += ' ORDER BY created_at DESC LIMIT $3 OFFSET $4'; // Optional ordering by created_at
+        // Add pagination parameters
+        query += ` ORDER BY created_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
         queryParams.push(limit, offset);
 
+        // Execute queries
         const result = await client.query(query, queryParams);
-        const countResult = await client.query(countQuery, search ? [`%${search}%`, `%${search}%`] : []);
+        const countResult = await client.query(countQuery, countParams);
 
-        const totalTickets = countResult.rows[0].total;
+        const totalTickets = parseInt(countResult.rows[0].total, 10);
         const totalPages = Math.ceil(totalTickets / limit);
 
+        // Send response
         res.json({
             tickets: result.rows,
             pagination: {
@@ -4366,17 +4621,13 @@ app.get('/tickets', authenticateToken, authorizeAdmin, async (req, res) => {
                 totalTickets: totalTickets
             }
         });
-
     } catch (error) {
         console.error("Error fetching tickets:", error);
         res.status(500).json({ message: "Internal server error" });
     } finally {
-        client.release(); // Ensure the client is released after the query
+        client.release();
     }
 });
-
-
-
 
 // PUT /tickets/:ticketId/approve (Approve a ticket)
 app.put('/tickets/:ticketId/approve', authenticateToken, authorizeAdmin, async (req, res) => {
@@ -4439,39 +4690,46 @@ app.get('/closed-tickets', authenticateToken, authorizeAdmin, async (req, res) =
     try {
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 10;
-        const search = req.query.search || "";
+        const search = req.query.search ? req.query.search.trim() : ""; // Trim and handle empty search
         const statusFilter = req.query.status || ""; // Add status filter parameter
         const offset = (page - 1) * limit;
 
-        let query = 'SELECT * FROM tickets WHERE 1=1'; // Start with a base query
-        let countQuery = 'SELECT COUNT(*) AS total FROM tickets WHERE 1=1'; // Same for count query
-        let queryParams = [];
+        let query = 'SELECT * FROM tickets WHERE 1=1'; // Base query
+        let countQuery = 'SELECT COUNT(*) AS total FROM tickets WHERE 1=1'; // Count query
+        const queryParams = [];
+        const countParams = [];
 
-        if (statusFilter) {  // Apply status filter if provided
+        // Apply status filter
+        if (statusFilter) {
             if (statusFilter === 'Open') {
                 query += ' AND status IS NULL';
                 countQuery += ' AND status IS NULL';
-            } else {
+            } else if (statusFilter === 'Closed') {
                 query += ' AND status IS NOT NULL';
                 countQuery += ' AND status IS NOT NULL';
             }
         }
 
-        if (search) { // Apply search filter if provided
-            query += ` AND (subject ILIKE $1 OR message ILIKE $2)`;
-            countQuery += ` AND (subject ILIKE $1 OR message ILIKE $2)`;
+        // Apply search filter
+        if (search) {
+            query += ` AND (subject ILIKE $${queryParams.length + 1} OR message ILIKE $${queryParams.length + 2})`;
+            countQuery += ` AND (subject ILIKE $${countParams.length + 1} OR message ILIKE $${countParams.length + 2})`;
             queryParams.push(`%${search}%`, `%${search}%`);
+            countParams.push(`%${search}%`, `%${search}%`);
         }
 
-        query += ' LIMIT $3 OFFSET $4';
+        // Add pagination
+        query += ` ORDER BY created_at DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
         queryParams.push(limit, offset);
 
+        // Execute queries
         const result = await client.query(query, queryParams);
-        const countResult = await client.query(countQuery, search ? [`%${search}%`, `%${search}%`] : []);
+        const countResult = await client.query(countQuery, countParams);
 
-        const totalClosedTickets = parseInt(countResult.rows[0].total);
+        const totalClosedTickets = parseInt(countResult.rows[0].total, 10);
         const totalPages = Math.ceil(totalClosedTickets / limit);
 
+        // Send response
         res.json({
             tickets: result.rows,
             pagination: {
@@ -4485,7 +4743,7 @@ app.get('/closed-tickets', authenticateToken, authorizeAdmin, async (req, res) =
         console.error("Error fetching closed tickets:", error);
         res.status(500).json({ message: "Internal server error" });
     } finally {
-        client.release(); // Ensure client is released
+        client.release(); // Ensure the client is released
     }
 });
 
@@ -5403,72 +5661,64 @@ app.get('/tree-view', authenticateToken, async (req, res) => {
         const searchTerm = req.query.search || "";
         const offset = (page - 1) * pageSize;
 
-        // 1. Get the user's genealogy data (more efficient query needed here based on database design)
+        // 1. Get the user's genealogy data
         const genealogyQuery = `SELECT * FROM genealogy WHERE user_id = $1`;
         const { rows: genealogyRows } = await client.query(genealogyQuery, [userId]);
 
         if (!genealogyRows || !genealogyRows.length) {
-            return res.status(404).json({ message: "Genealogy data not found for this user.  Check user ID." });
+            return res.status(404).json({ message: "Genealogy data not found for this user. Check user ID." });
         }
 
         const genealogyData = genealogyRows[0];
         const members = [];
-        //Efficiently extract members using array.  Note this assumes your data format.
         for (let i = 1; i <= 6; i++) {
             const memberId = genealogyData[`member${i}`];
             if (memberId) members.push(memberId);
         }
 
+        // Handle empty members array
+        if (members.length === 0) {
+            return res.json({ treeData: [], pagination: { currentPage: page, pageSize, totalCount: 0 } });
+        }
+
+
         // Create a map for efficient status and rebirth balance lookups
         const userStatusMap = new Map();
         const userRebirthBalanceMap = new Map();
 
+        //More efficient combined query - only one database call
         const combinedQuery = `
             SELECT 
-                u.user_id, u.username, u.created_at, u.status, u.rebirth_balance
+                u.user_id, u.username, u.created_at, u.status, u.rebirth_balance,
+                COUNT(*) OVER () as total_count
             FROM users u
-            WHERE u.user_id IN (${members.map(id => client.escapeLiteral(id)).join(',')})  -- Use IN operator, sanitized
-              AND (LOWER(u.username) LIKE LOWER($1) OR LOWER(u.user_id) LIKE LOWER($2))
+            WHERE u.user_id = ANY($1)  -- Use ANY operator for arrays
+              AND (LOWER(u.username) LIKE LOWER($2) OR LOWER(u.user_id) LIKE LOWER($3))
+            ORDER BY u.created_at DESC
+            LIMIT $4 OFFSET $5
         `;
-        const { rows: combinedRows } = await client.query(combinedQuery, [`%${searchTerm}%`, `%${searchTerm}%`]);
 
-        combinedRows.forEach(row => {
+        const { rows: users } = await client.query(combinedQuery, [members, `%${searchTerm}%`, `%${searchTerm}%`, pageSize, offset]);
+
+        const totalCount = users.length > 0 ? users[0].total_count : 0; //Get total count from the first row
+
+        users.forEach(row => {
             userStatusMap.set(row.user_id, row.status);
             userRebirthBalanceMap.set(row.user_id, row.rebirth_balance);
         });
-
-        // 2. Fetch user data with pagination and search (combined into one query)
-        const usersQuery = `
-            SELECT 
-                COUNT(*) OVER () as total_count, -- Count all matching rows
-                u.user_id, u.username, u.created_at
-            FROM users u
-            WHERE u.user_id IN (${members.map(id => client.escapeLiteral(id)).join(',')}) -- Use IN operator, sanitized
-              AND (LOWER(u.username) LIKE LOWER($1) OR LOWER(u.user_id) LIKE LOWER($2))
-            ORDER BY u.created_at DESC
-            LIMIT $3 OFFSET $4
-        `;
-
-        const { rows: users } = await client.query(usersQuery, [`%${searchTerm}%`, `%${searchTerm}%`, pageSize, offset]);
-
-        //Now total count is available on each row
-        const totalCount = users.length > 0 ? users[0].total_count : 0;
 
         const treeData = users.map(user => ({
             ...user,
             status: userStatusMap.get(user.user_id),
             memberType: members.includes(user.user_id) ? 'Direct' : 'Indirect',
-            totalCount: 0, // Placeholder -  Calculate descendants here if needed
+            totalCount: 0,
             amount: userRebirthBalanceMap.get(user.user_id) || 0
         }));
 
-        res.json({
-            treeData,
-            pagination: { currentPage: page, pageSize, totalCount },
-        });
+        res.json({ treeData, pagination: { currentPage: page, pageSize, totalCount } });
     } catch (error) {
         console.error("Error fetching tree view data:", error);
-        res.status(500).json({ message: `Failed to fetch tree view data: ${error.message}` }); // More detailed error
+        res.status(500).json({ message: `Failed to fetch tree view data: ${error.message}` });
     } finally {
         client.release();
     }
@@ -8742,8 +8992,9 @@ app.put('/api/payouts/makePaid', authenticateToken, authorizeAdmin, async (req, 
 
         const updateQuery = `
             UPDATE payout_table
-            SET status = 'Paid', approval_date = CURRENT_TIMESTAMP
-            WHERE id = ANY($1);
+            SET status = 'Paid', approval_date = NOW()
+            WHERE id = ANY($1)
+            RETURNING id;
         `;
 
         const updateValues = [ids];
@@ -8859,6 +9110,478 @@ app.get('/member-counts', authenticateToken, authorizeAdmin, async (req, res) =>
     } catch (error) {
         console.error('Error fetching member counts:', error);
         res.status(500).json({ message: 'Failed to fetch member counts.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.post('/process-payout', authenticateToken, async (req, res) => {
+    const { userId, amount, method, reason } = req.body;
+
+    // Input validation
+    if (!userId || !amount || !method || !reason) {
+        return res.status(400).json({ message: 'All fields are required' });
+    }
+    if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: 'Invalid amount. Must be a positive number.' });
+    }
+    if (!['bank', 'upi'].includes(method)) { // Add other allowed methods here
+        return res.status(400).json({ message: 'Invalid payment method' });
+    }
+
+    const client = await pgPool.connect();
+    try {
+        //Check if user exists
+        const userCheckQuery = 'SELECT * FROM users WHERE user_id = $1';
+        const userCheckResult = await client.query(userCheckQuery, [userId]);
+
+        if (userCheckResult.rows.length === 0) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        // Check user balance (replace with your actual balance field)
+        const balanceCheckQuery = 'SELECT silver_board_income,gold_board_income,diamond_board_income,platinum_board_income,king_board_income FROM users WHERE user_id = $1';
+        const balanceCheckResult = await client.query(balanceCheckQuery, [userId]);
+        const userBalance = parseFloat(balanceCheckResult.rows[0].silver_board_income) + parseFloat(balanceCheckResult.rows[0].gold_board_income) + parseFloat(balanceCheckResult.rows[0].diamond_board_income) + parseFloat(balanceCheckResult.rows[0].platinum_board_income) + parseFloat(balanceCheckResult.rows[0].king_board_income);
+
+        if (userBalance < amount) {
+            return res.status(400).json({ message: 'Insufficient balance' });
+        }
+
+
+        //Begin Transaction
+        await client.query('BEGIN');
+
+        const { rows: userBoards } = await client.query(`
+            SELECT boardtype 
+            FROM boards 
+            WHERE userid = $1 AND status='ACTIVE'
+        `, [userId]);
+
+        if (userBoards.length === 0) {
+            throw new Error('User is not active on any board.');
+        }
+
+        // Define board hierarchy
+        const boardHierarchy = ['silver', 'gold', 'diamond', 'platinum', 'king'];
+
+        // Sort the user's active boards by the board hierarchy
+        const sortedBoards = userBoards.sort((a, b) => {
+            return boardHierarchy.indexOf(a.boardtype) - boardHierarchy.indexOf(b.boardtype);
+        });
+
+        // The top board (first in the sorted list)
+        const topBoard = sortedBoards[0].boardtype.toLowerCase();
+        const targetBoardIncomeColumn = `${topBoard}_board_income`;
+
+        const updateBalanceQuery = `UPDATE users SET ${targetBoardIncomeColumn} = ${targetBoardIncomeColumn} - $1 WHERE user_id = $2`;
+        await client.query(updateBalanceQuery, [amount, userId]);
+
+        // Record the payout transaction (adapt to your schema)
+        const transactionQuery = `
+            INSERT INTO payout_table (user_id, amount, method, reason, transaction_id)
+            VALUES ($1, $2, $3, $4, uuidv4()) RETURNING transaction_id
+        `;
+        const transactionResult = await client.query(transactionQuery, [userId, amount, method, reason]);
+        const transactionId = transactionResult.rows[0].transaction_id;
+        await recordWalletTransaction(req.user.userId, amount, 'PAYOUT_TRANSFER', userId);
+        //Commit transaction
+        await client.query('COMMIT');
+
+        res.json({ message: 'Payout successful', transactionId });
+    } catch (error) {
+        //Rollback transaction if error occurs
+        await client.query('ROLLBACK');
+        console.error('Error processing payout:', error);
+        res.status(500).json({ message: 'Failed to process payout' });
+    } finally {
+        client.release();
+    }
+});
+
+app.put('/api/payouts/updateStatus/:payoutId', authenticateToken, authorizeAdmin, async (req, res) => {
+    const payoutId = parseInt(req.params.payoutId, 10); //Added parseInt to ensure integer value
+    const { status } = req.body;
+
+    // Input validation (crucial for security)
+    if (!payoutId || !status || !['paid', 'reject'].includes(status)) {
+        return res.status(400).json({ error: 'Invalid request parameters.' });
+    }
+
+    const client = await pgPool.connect();
+    try {
+        const updateQuery = `
+            UPDATE payout_table
+            SET status = $1
+            WHERE id = $2
+            RETURNING id, status;
+        `;
+        const values = [status, payoutId];
+
+        const result = await client.query(updateQuery, values);
+        if (result.rowCount === 1) {
+            res.json({ message: 'Payout status updated successfully.', payout: result.rows[0] });
+        } else {
+            res.status(404).json({ error: 'Payout not found or already updated.' });
+        }
+    } catch (error) {
+        console.error('Error updating payout status:', error);
+        res.status(500).json({ error: 'Failed to update payout status.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/payout-history', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const searchTerm = req.query.search || '';
+        const offset = (page - 1) * pageSize;
+
+        // Build the query dynamically based on search term. Parameterized for security.
+        let query = `
+            SELECT 
+                COUNT(*) OVER () AS total_count, -- total count for pagination
+                pt.*, 
+                u.username AS member_name, 
+                COALESCE(b.bank_name, '') as bank_details, 
+                COALESCE(upi.upi_address, '') AS upi_details
+            FROM payout_table pt
+            JOIN users u ON pt.user_id = u.user_id  
+            LEFT JOIN banks b ON pt.user_id = b.user_id  -- Join with bank details (if any)
+            LEFT JOIN upis upi ON pt.user_id = upi.user_id -- Join with UPI details (if any)
+        `;
+
+        const queryParams = []; //Array to store the queryParams
+        if (searchTerm) {
+            query += `WHERE LOWER(pt.member) LIKE LOWER($1) OR LOWER(pt.mobile) LIKE LOWER($2) OR pt.amount::TEXT LIKE $3`; //Case insensitive search
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
+
+        query += ` ORDER BY pt.withdrawal_date DESC LIMIT $${queryParams.length + 1} OFFSET $${queryParams.length + 2}`;
+        queryParams.push(pageSize, offset); // Add pagination parameters
+
+
+        const result = await client.query(query, queryParams);
+
+        // Extract total count from the first row
+        const totalCount = result.rows.length > 0 ? result.rows[0].total_count : 0;
+        // Remove total count from result rows (not needed in client)
+        const payoutHistory = result.rows.map(row => {
+            delete row.total_count;
+            return row;
+        });
+
+        res.json({ payoutHistory, totalCount, currentPage: page, pageSize });
+    } catch (error) {
+        console.error('Error fetching payout history:', error);
+        res.status(500).json({ message: 'Failed to fetch payout history.' });
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/admin/download/payout-excel', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const searchTerm = req.query.search || '';
+
+        //Query to fetch payout data with necessary joins (same as before)
+        let query = `
+            SELECT 
+                pt.payout_id, 
+                pt.user_id, 
+                pt.amount, 
+                pt.payout_date, 
+                pt.method, 
+                pt.status, 
+                pt.transaction_id, 
+                pt.reason,
+                u.username AS member_name,
+                b.account_holder_name AS bank_account_holder,
+                b.account_number AS bank_account_number,
+                b.bank_name AS bank_name,
+                b.bank_ifsc AS bank_ifsc,
+                b.bank_branch AS bank_branch,
+                upi.upi_address AS upi_address,
+                upi.image_name AS upi_image
+            FROM payout_table pt
+            JOIN users u ON pt.user_id = u.user_id
+            LEFT JOIN banks b ON pt.user_id = b.user_id
+            LEFT JOIN upis upi ON pt.user_id = upi.user_id
+        `;
+        const queryParams = [];
+        if (searchTerm) {
+            query += ` WHERE LOWER(u.username) LIKE LOWER($1) OR LOWER(pt.mobile) LIKE LOWER($2) OR pt.amount::text LIKE $3`;
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
+
+        const { rows: payoutData } = await client.query(query, queryParams);
+
+        // Prepare data for Excel sheet with all columns
+        const worksheetData = payoutData.map((payout, index) => ({
+            'S.NO': index + 1,
+            'Payout ID': payout.payout_id,
+            'Member': payout.member_name,
+            'User ID': payout.user_id,
+            'Amount': payout.amount,
+            'Payout Date': payout.payout_date,
+            'Method': payout.method,
+            'Status': payout.status,
+            'Transaction ID': payout.transaction_id,
+            'Reason': payout.reason,
+            'Bank Account Holder': payout.bank_account_holder,
+            'Bank Account Number': payout.bank_account_number,
+            'Bank Name': payout.bank_name,
+            'Bank IFSC': payout.bank_ifsc,
+            'Bank Branch': payout.bank_branch,
+            'UPI Address': payout.upi_address,
+            'UPI Image': payout.upi_image
+        }));
+
+        // Create Excel workbook and worksheet
+        const worksheet = xlsx.utils.json_to_sheet(worksheetData);
+        const workbook = xlsx.utils.book_new();
+        const worksheetName = 'Payout History';
+        xlsx.utils.book_append_sheet(workbook, worksheet, worksheetName);
+
+        // Add styling to the worksheet (optional)
+        const ws = workbook.Sheets[worksheetName];
+        // Example: Add bold header row
+        xlsx.utils.sheet_add_aoa(ws, [['S.NO', 'Payout ID', 'Member', 'User ID', 'Amount', 'Payout Date', 'Method', 'Status', 'Transaction ID', 'Reason', 'Bank Account Holder', 'Bank Account Number', 'Bank Name', 'Bank IFSC', 'Bank Branch', 'UPI Address', 'UPI Image']], { origin: 'A1', readOnly: false });
+        const headerRow = ws['!ref'].split(':')[0].slice(0, -1) + '1';
+        ws[headerRow]['!s'] = { font: { bold: true } };
+
+        // Generate Excel file buffer
+        const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+
+        // Send response to client with updated headers
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=payout_history.xlsx');
+        res.send(excelBuffer);
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        res.status(500).send('Error generating Excel file.');
+    } finally {
+        client.release();
+    }
+});
+
+app.get('/admin/download/members-excel', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const { searchTerm, fromDate, toDate, pageSize, page } = req.query;
+        const offset = (parseInt(page, 10) - 1) * parseInt(pageSize, 10);
+
+        let query = `
+            SELECT
+                COUNT(*) OVER () AS total_count,
+                u.user_id,
+                u.username,
+                u.introducer_id,
+                u.mobile,
+                u.email,
+                u.created_at,
+                u.lock_status,
+                u.withdrawal_lock_status,
+                COALESCE(b.account_holder_name, '') as bank_account_holder,
+                COALESCE(b.account_number, '') as bank_account_number,
+                COALESCE(b.bank_name, '') as bank_name,
+                COALESCE(b.bank_ifsc, '') as bank_ifsc,
+                COALESCE(b.bank_branch, '') as bank_branch,
+                COALESCE(upi.upi_address, '') as upi_address,
+                COALESCE(upi.image_name, '') as upi_image,
+                (SELECT COUNT(*) FROM users WHERE introducer_id = u.user_id) as referral_count
+            FROM users u
+            LEFT JOIN banks b ON u.user_id = b.user_id
+            LEFT JOIN upis upi ON u.user_id = upi.user_id
+            WHERE u.role != 'admin'
+        `;
+        const queryParams = [];
+        let paramIndex = 1;
+        const whereClauses = [];
+
+        if (searchTerm) {
+            whereClauses.push(`LOWER(u.username) LIKE LOWER($${paramIndex++}) OR LOWER(u.user_id) LIKE LOWER($${paramIndex++}) OR LOWER(u.mobile) LIKE LOWER($${paramIndex++})`);
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
+
+        if (fromDate) {
+            whereClauses.push(`u.created_at >= $${paramIndex++}`);
+            queryParams.push(fromDate);
+        }
+
+        if (toDate) {
+            whereClauses.push(`u.created_at <= $${paramIndex++}`);
+            queryParams.push(toDate);
+        }
+
+        if (whereClauses.length > 0) {
+            query += ` WHERE ${whereClauses.join(' AND ')}`;
+        }
+
+        query += ` ORDER BY u.user_id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        queryParams.push(pageSize, offset);
+
+        const { rows: members } = await client.query(query, queryParams);
+        const totalCount = members.length > 0 ? members[0].total_count : 0;
+        const paginatedMembers = members.map(member => {
+            delete member.total_count;
+            return member;
+        });
+
+        const worksheetData = paginatedMembers.map((member, index) => ({
+            'S.NO': index + 1,
+            'User ID': member.user_id,
+            'Username': member.username,
+            'Introducer ID': member.introducer_id,
+            'Referral Count': member.referral_count,
+            'Mobile': member.mobile,
+            'Email': member.email,
+            'Created At': member.created_at,
+            'Lock Status': member.lock_status,
+            'Withdrawal Lock Status': member.withdrawal_lock_status,
+            'Bank Account Holder': member.bank_account_holder,
+            'Bank Account Number': member.bank_account_number,
+            'Bank Name': member.bank_name,
+            'Bank IFSC': member.bank_ifsc,
+            'Bank Branch': member.bank_branch,
+            'UPI Address': member.upi_address,
+            'UPI Image': member.upi_image,
+        }));
+
+        const workbook = xlsx.utils.book_new();
+        const worksheet = xlsx.utils.json_to_sheet([]);
+
+        if (worksheetData.length > 0) {
+            // Extract headers dynamically if data exists
+            const headers = Object.keys(worksheetData[0]);
+            xlsx.utils.sheet_add_aoa(worksheet, [headers], { origin: 'A1' });
+            xlsx.utils.sheet_add_json(worksheet, worksheetData, { origin: 'A2', skipHeader: true });
+        } else {
+            // Provide a default header row if no data is available
+            const headers = [
+                'S.NO', 'User ID', 'Username', 'Introducer ID', 'Referral Count',
+                'Mobile', 'Email', 'Created At', 'Lock Status', 'Withdrawal Lock Status',
+                'Bank Account Holder', 'Bank Account Number', 'Bank Name',
+                'Bank IFSC', 'Bank Branch', 'UPI Address', 'UPI Image'
+            ];
+            xlsx.utils.sheet_add_aoa(worksheet, [headers], { origin: 'A1' });
+        }
+        // Append the worksheet to the workbook
+        xlsx.utils.book_append_sheet(workbook, worksheet, 'Members');
+
+        // Generate Excel file
+        const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=members.xlsx');
+        res.send(excelBuffer);
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        res.status(500).send('Error generating Excel file.');
+    } finally {
+        client.release();
+    }
+});
+
+// Route for PDF download
+app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const searchTerm = req.query.search || ''; // searchTerm will always be a string (empty string if undefined)
+        const fromDate = req.query.fromDate ? new Date(req.query.fromDate) : null;
+        const toDate = req.query.toDate ? new Date(req.query.toDate) : null;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const page = parseInt(req.query.page, 10) || 1;
+        const offset = (page - 1) * pageSize;
+        const limit = pageSize;
+
+        console.log("fromDate:", fromDate);
+        console.log("toDate:", toDate);
+        console.log("searchTerm:", searchTerm);
+        console.log("pageSize:", pageSize);
+        console.log("page:", page);
+
+        const query = `
+    SELECT 
+        COUNT(*) OVER () AS total_count,
+        user_id, 
+        username, 
+        introducer_id, 
+        (SELECT COUNT(*) FROM users WHERE introducer_id = users.user_id) as referral_count,
+        mobile, 
+        email, 
+        created_at,
+        lock_status,
+        withdrawal_lock_status
+    FROM users
+    WHERE role != 'admin'
+      AND (
+            $1::TEXT IS NULL OR 
+            $1::TEXT = '' OR 
+            LOWER(username) LIKE LOWER($2::TEXT) OR 
+            LOWER(user_id::TEXT) LIKE LOWER($2::TEXT)
+          )
+      AND ($3::DATE IS NULL OR created_at >= $3::DATE)
+      AND ($4::DATE IS NULL OR created_at <= $4::DATE)
+    ORDER BY id ASC LIMIT $5 OFFSET $6
+`;
+
+
+        const queryParams = [
+            searchTerm || null,
+            `%${searchTerm || ''}%`,
+            fromDate || null,
+            toDate || null,
+            limit,
+            offset,
+        ];
+
+
+
+
+        const { rows: members } = await client.query(query, queryParams);
+
+        //Handle empty result set
+        if (members.length === 0) {
+            return res.status(404).json({ message: 'No members found.' });
+        }
+
+        const paginatedMembers = members.map((member, index) => ({
+            sno: index + 1,
+            userId: member.user_id,
+            username: member.username,
+            introducerId: member.introducer_id,
+            referralCount: member.referral_count,
+            mobile: member.mobile,
+            email: member.email,
+            createdAt: member.created_at,
+            lockStatus: member.lock_status,
+            withdrawalLockStatus: member.withdrawal_lock_status,
+        }));
+
+        const doc = new jsPDF();
+        doc.setFontSize(10);
+
+        const headers = Object.keys(paginatedMembers[0]).map(key => key.replace(/([A-Z])/g, " $1").trim().toUpperCase());
+
+        doc.autoTable({
+            head: [headers],
+            body: paginatedMembers,
+            columnStyles: {
+                0: { cellWidth: 15 },
+            },
+        });
+
+        const pdfBuffer = doc.output('arraybuffer');
+        res.setHeader('Content-Type', 'application/pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename=members.pdf');
+        res.send(Buffer.from(pdfBuffer));
+    } catch (error) {
+        console.error('Error generating PDF:', error);
+        res.status(500).json({ error: 'Failed to generate PDF: ' + error.message });
     } finally {
         client.release();
     }
