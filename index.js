@@ -24,25 +24,7 @@ AWS.config.update({
 });
 const s3 = new AWS.S3();
 
-const allowedOrigins = [
-    'https://aghanadmin1.netlify.app',
-    'https://aghan-user.netlify.app',
-];
-
-const corsOptions = {
-    origin: (origin, callback) => {
-        if (allowedOrigins.includes(origin) || !origin) { // Allow localhost and the specified origins
-            callback(null, true);
-        } else {
-            callback(new Error(`Origin '${origin}' is not allowed by CORS.`));
-        }
-    },
-    credentials: true, // VERY IMPORTANT for session cookies to work
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], //Explicitly list allowed methods.
-    allowedHeaders: ['Content-Type', 'Authorization'],  // Add headers here.
-};
-
-app.use(cors(corsOptions));
+app.use(cors());
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.json({ limit: '50mb' }));
@@ -79,24 +61,24 @@ const SILVER_TO_GOLD_UPGRADE_AMOUNT = 10000;
 
 cron.schedule('0 0 * * *', processRebirthBonuses);
 
-const pgPool = new Pool({
-    user: 'surya',
-    host: 'localhost',
-    database: 'Aghan',
-    password: 'surya123',
-    port: 5432,
-});
-
 // const pgPool = new Pool({
 //     user: 'surya',
-//     host: 'database-1.cbcm2uwoiait.ap-south-1.rds.amazonaws.com',
+//     host: 'localhost',
 //     database: 'Aghan',
-//     password: 'suryaprakash123',
+//     password: 'surya123',
 //     port: 5432,
-//     ssl: {
-//         rejectUnauthorized: false, 
-//     },
 // });
+
+const pgPool = new Pool({
+    user: 'surya',
+    host: 'database-1.cbcm2uwoiait.ap-south-1.rds.amazonaws.com',
+    database: 'Aghan',
+    password: 'suryaprakash123',
+    port: 5432,
+    ssl: {
+        rejectUnauthorized: false, 
+    },
+});
 
 
 app.get('/', (req, res) => {
