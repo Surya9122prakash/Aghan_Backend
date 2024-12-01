@@ -24,7 +24,7 @@ AWS.config.update({
 });
 const s3 = new AWS.S3();
 
-const allowedOrigins = ['https://aghanadmin1.netlify.app/', 'https://aghan-user.netlify.app/'];
+const allowedOrigins = ['https://aghanadmin1.netlify.app/', 'https://aghan-user.netlify.app/','*'];
 const corsOptions = {
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.includes(origin)) {
