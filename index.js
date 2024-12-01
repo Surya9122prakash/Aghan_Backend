@@ -24,7 +24,26 @@ AWS.config.update({
 });
 const s3 = new AWS.S3();
 
-app.options('*',cors())
+const allowedOrigins = [
+    '*',
+    'https://aghanadmin1.netlify.app',
+    'https://aghan-user.netlify.app',
+];
+
+const corsOptions = {
+    origin: (origin, callback) => {
+        if (allowedOrigins.includes(origin) || !origin) { // Allow localhost and the specified origins
+            callback(null, true);
+        } else {
+            callback(new Error(`Origin '${origin}' is not allowed by CORS.`));
+        }
+    },
+    credentials: true, // VERY IMPORTANT for session cookies to work
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'], //Explicitly list allowed methods.
+    allowedHeaders: ['Content-Type', 'Authorization'],  // Add headers here.
+};
+
+app.use(cors(corsOptions));
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ limit: '50mb', extended: true }));
 app.use(express.json({ limit: '50mb' }));
