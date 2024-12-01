@@ -9676,6 +9676,41 @@ app.post('/users/deliver-achievers', authenticateToken, async (req, res) => {
   }
 });
 
+app.get('/generate-excel/undelivered-achievers', authenticateToken, async (req, res) => {
+  const client = await pgPool.connect();
+  try {
+    const searchTerm = req.query.search || '';
+
+    const query = `
+      SELECT user_id, username
+      FROM users
+      WHERE user_id NOT IN (SELECT user_id FROM achieved_users)
+      ${searchTerm ? `AND LOWER(username) LIKE LOWER($1)` : ''}
+      ORDER BY user_id
+    `;
+
+    const params = searchTerm ? [`%${searchTerm}%`] : [];
+    const { rows: undeliveredAchievers } = await client.query(query, params);
+
+    const worksheet = XLSX.utils.json_to_sheet(undeliveredAchievers);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Undelivered Achievers");
+
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename=undelivered_achievers.xlsx');
+
+    res.send(excelBuffer);  // Send the buffer directly as the response
+
+  } catch (error) {
+    console.error('Error generating Excel:', error);
+    res.status(500).json({ message: 'Failed to generate Excel file.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.listen(port, () => {
     console.log(`Server is listening at http://localhost:${port}`);
 });
