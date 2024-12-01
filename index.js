@@ -9592,6 +9592,90 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
     }
 });
 
+app.get('/users/undelivered-achievers', authenticateToken, async (req, res) => {
+    const client = await pgPool.connect();
+    try {
+        const page = parseInt(req.query.page, 10) || 1;
+        const pageSize = parseInt(req.query.pageSize, 10) || 10;
+        const searchTerm = req.query.search || '';
+        const offset = (page - 1) * pageSize;
+
+        // SQL query to select users NOT IN achieved_users
+        const query = `
+            SELECT user_id, username 
+            FROM users
+            WHERE user_id NOT IN (SELECT user_id FROM achieved_users)
+            ${searchTerm ? `AND LOWER(username) LIKE LOWER($1)` : ''}
+            ORDER BY user_id  -- or any other relevant column
+            LIMIT $${searchTerm ? '2' : '1'} OFFSET $${searchTerm ? '3' : '2'}
+        `;
+
+        const countQuery = `
+            SELECT COUNT(*) AS total
+            FROM users
+            WHERE user_id NOT IN (SELECT user_id FROM achieved_users)
+            ${searchTerm ? `AND LOWER(username) LIKE LOWER($1)` : ''}
+        `;
+
+
+        const params = searchTerm ? [`%${searchTerm}%`, pageSize, offset] : [pageSize, offset];
+        const countResult = await client.query(countQuery, searchTerm ? [`%${searchTerm}%`] : []);
+        const totalCount = parseInt(countResult.rows[0].total, 10);
+
+        const { rows: undeliveredAchievers } = await client.query(query, params);
+
+
+
+        res.json({ undeliveredAchievers, totalCount });
+    } catch (error) {
+        console.error('Error fetching undelivered achievers:', error);
+        res.status(500).json({ message: 'Failed to fetch undelivered achievers' });
+    } finally {
+        client.release();
+    }
+});
+
+
+
+app.post('/users/deliver-achievers', authenticateToken, async (req, res) => {
+  const client = await pgPool.connect();
+  try {
+    const userIds = req.body.userIds; // Array of user IDs to mark as delivered
+
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+      return res.status(400).json({ message: 'Invalid user IDs provided.' });
+    }
+    
+    // Use a transaction to ensure all updates or inserts happen atomically.
+    await client.query('BEGIN');
+
+    const insertQuery = `
+        INSERT INTO achieved_users (user_id, reward, achieved_at, status) 
+        VALUES ($1, $2, NOW(), 'delivered')  returning *;`;
+
+
+    //Assuming a reward will be a part of the request:
+    const reward = req.body.reward || 'Default Reward'; // Provide a default reward if none is given
+
+    const results = [];
+    for(const userId of userIds){
+        const insertResult = await client.query(insertQuery, [userId, reward]);
+        results.push(insertResult.rows[0]); // Store inserted rows
+    }
+
+
+    await client.query('COMMIT');
+
+    res.json({ message: 'Achievers delivered successfully', results });
+  } catch (error) {
+    await client.query('ROLLBACK'); // Rollback if any insert fails
+    console.error('Error delivering achievers:', error);
+    res.status(500).json({ message: 'Failed to deliver achievers.' });
+  } finally {
+    client.release();
+  }
+});
+
 app.listen(port, () => {
     console.log(`Server is listening at http://localhost:${port}`);
 });
