@@ -96,6 +96,11 @@ const pgPool = new Pool({
 // });
 
 
+app.get('/', (req, res) => {
+  res.send('CORS with two origins is configured!');
+});
+
+
 async function query(text, params) {
     const start = Date.now()
     const res = await pgPool.query(text, params)
