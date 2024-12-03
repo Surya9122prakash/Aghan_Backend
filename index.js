@@ -294,24 +294,22 @@ async function findAndPlaceUser(userId, introducerId) {
         const ancestorLevels = await getAncestorLevels(introducerId);
 
         await client.query(
-            `INSERT INTO genealogy (user_id, level1, level2, level3, level4, level5, level6)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+            `INSERT INTO genealogy (user_id, level1, level2, level3, level4)
+            VALUES ($1, $2, $3, $4, $5)`,
             [
                 userId,
                 ancestorLevels[0] || null,
                 ancestorLevels[1] || null,
                 ancestorLevels[2] || null,
-                ancestorLevels[3] || null,
-                ancestorLevels[4] || null,
-                ancestorLevels[5] || null
+                ancestorLevels[3] || null
             ]
         );
 
         //Improved logic to handle multiple available slots
         const availableSlots = await client.query(`
-            SELECT user_id, member1, member2, member3, member4, member5, member6
+            SELECT user_id, member1, member2, member3, member4
             FROM genealogy
-            WHERE member1 IS NULL OR member2 IS NULL OR member3 IS NULL OR member4 IS NULL OR member5 IS NULL OR member6 IS NULL;
+            WHERE member1 IS NULL OR member2 IS NULL OR member3 IS NULL OR member4 IS NULL;
         `);
 
 
@@ -348,7 +346,7 @@ async function getAncestorLevels(introducerId) {
     let currentId = introducerId;
 
     try {
-        for (let i = 1; i < 6; i++) {
+        for (let i = 1; i < 4; i++) {
             if (!currentId) break;
 
             // Fetch the current ancestor's introducer from `users` table
@@ -379,7 +377,7 @@ async function getAncestorLevelsFromGenealogy(userId) {
     const client = await pgPool.connect();
 
     try {
-        for (let level = 1; level <= 6; level++) {
+        for (let level = 1; level <= 4; level++) {
             const result = await client.query(
                 `SELECT user_id 
                  FROM genealogy 
@@ -387,8 +385,6 @@ async function getAncestorLevelsFromGenealogy(userId) {
                     OR member2 = $1 
                     OR member3 = $1 
                     OR member4 = $1 
-                    OR member5 = $1 
-                    OR member6 = $1 
                  LIMIT 1`,
                 [currentUserId]
             );
@@ -404,7 +400,7 @@ async function getAncestorLevelsFromGenealogy(userId) {
         }
 
         // Fill remaining levels with null if there are fewer than 6 ancestors
-        while (ancestors.length < 6) {
+        while (ancestors.length < 4) {
             ancestors.push(null);
         }
     } catch (error) {
@@ -435,16 +431,12 @@ async function updateAncestorLevelsInGenealogy(userId) {
                          treelevel2 = $2, 
                          treelevel3 = $3, 
                          treelevel4 = $4, 
-                         treelevel5 = $5, 
-                         treelevel6 = $6
-                     WHERE user_id = $7`,
+                     WHERE user_id = $5`,
                     [
                         ancestors[0] || null,
                         ancestors[1] || null,
                         ancestors[2] || null,
                         ancestors[3] || null,
-                        ancestors[4] || null,
-                        ancestors[5] || null,
                         userId
                     ]
                 );
@@ -545,7 +537,7 @@ async function getGenealogyTree(userId) {
 
 
             const children = [];
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= 4; i++) {
                 const memberId = parent[`member${i}`];
                 if (memberId) {
                     const childNode = await buildNestedTree(memberId, level + 1, visited);
@@ -809,7 +801,7 @@ async function handleSilverBoardUpgrade(userId) {
     try {
         await client.query('BEGIN');
         const { rows: genealogyResult } = await client.query(
-            `SELECT treelevel1, treelevel2, treelevel3, treelevel4, treelevel5, treelevel6 
+            `SELECT treelevel1, treelevel2, treelevel3, treelevel4
              FROM genealogy 
              WHERE user_id = $1`,
             [userId]
@@ -1036,8 +1028,8 @@ async function getSilverBoardParent(userId) {
     try {
         const [rows] = await client.query(
             `SELECT userid FROM silverBoardGenealogy 
-             WHERE member1 = ? OR member2 = ? OR member3 = ? OR member4 = ? OR member5 = ? OR member6 = ?`,
-            [userId, userId, userId, userId, userId, userId]
+             WHERE member1 = ? OR member2 = ? OR member3 = ? OR member4 = ?`,
+            [userId, userId, userId, userId]
         );
 
         return rows.length > 0 ? rows[0].userId : null;
@@ -1142,7 +1134,7 @@ async function calculateLevelIncomeForBoard(userId, boardType) {
 
         const genealogyData = genealogyRows[0];
 
-        for (let level = 1; level <= 6; level++) {
+        for (let level = 1; level <= 5; level++) {
             const levelPercentage = parseFloat(plan[0][`level${level}`]) || 0;
             const referralsAtLevel = getReferralsAtLevelFromGenealogy(genealogyData, level);
 
@@ -1187,14 +1179,13 @@ async function findAndPlaceUserInSilverBoard(userId) {
 
         // Step 2: Find the first available top-level parent with empty slots
         const result = await client.query(
-            `SELECT user_id, member1, member2, member3, member4, member5, member6
+            `SELECT user_id, member1, member2, member3, member4, member5
              FROM silverboardgenealogy
              WHERE (member1 IS NULL
                  OR member2 IS NULL
                  OR member3 IS NULL
                  OR member4 IS NULL
-                 OR member5 IS NULL
-                 OR member6 IS NULL)
+                 OR member5 IS NULL)
              ORDER BY id
              LIMIT 1`
         );
@@ -1205,7 +1196,7 @@ async function findAndPlaceUserInSilverBoard(userId) {
             const parentRow = result.rows[0];
 
             // Loop through the member slots (member1 to member6)
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= 5; i++) {
                 const memberSlot = `member${i}`;
                 if (parentRow[memberSlot] === null) {
                     // Update the first available member slot under the top-level parent
@@ -1259,7 +1250,7 @@ async function buildSilverBoardTree(userId) { // Modified to fetch all users, no
     const client = await pgPool.connect();
     try {
         // Fetch all silverboard members from the database
-        const { rows: silverBoardMembers } = await client.query('SELECT * FROM silverboardgenealogy4                                                        CCC                                                                                                                                                         ');
+        const { rows: silverBoardMembers } = await client.query('SELECT * FROM silverboardgenealogy                                                     CCC                                                                                                                                                         ');
 
         if (!silverBoardMembers || silverBoardMembers.length === 0) {
             return { userId: null, children: [] }; // Return an empty tree if no Silver Board members exist
@@ -1282,7 +1273,7 @@ async function buildSilverBoardTree(userId) { // Modified to fetch all users, no
 
 function hasParent(referrals, userId) {
     for (const referral of referrals) {
-        for (let i = 1; i <= 6; i++) {
+        for (let i = 1; i <= 5; i++) {
             if (referral[`member${i}`] === userId) {
                 return true;
             }
@@ -1402,7 +1393,7 @@ async function distributeSilverBoardLevelIncome(userId, levelIncome) {
 
 
         // 3. Iterate through Genealogy Levels and Distribute Income
-        for (let level = 1; level <= 6; level++) {
+        for (let level = 1; level <= 5; level++) {
             const memberIds = getReferralsAtLevelFromGenealogy(genealogyData, level); // Helper function (see below)
             const levelPercentage = parseFloat(silverPlan[`level${level}`]) || 0; //Get percentage from plan
 
@@ -1513,7 +1504,7 @@ async function distributeBoardLevelIncome(userId, boardType) {
 
         const genealogyData = genealogyRows[0];
 
-        for (let level = 1; level <= 6; level++) {
+        for (let level = 1; level <= 5; level++) {
             const levelPercentage = parseFloat(boardPlan[`level${level}`]) || 0; // Use boardPlan
             const referralsAtLevel = getReferralsAtLevelFromGenealogy(genealogyData, level);
 
@@ -1574,14 +1565,13 @@ async function findAndPlaceUserInBoard(userId, boardType) {
         );
         // Query to find empty slots in the board
         const { rows: emptySlotRows } = await client.query(
-            `SELECT id, user_id, member1, member2, member3, member4, member5, member6
+            `SELECT id, user_id, member1, member2, member3, member4, member5 
              FROM ${boardtype}boardgenealogy
              WHERE member1 IS NULL
                 OR member2 IS NULL
                 OR member3 IS NULL
                 OR member4 IS NULL
                 OR member5 IS NULL
-                OR member6 IS NULL
              LIMIT 1`
         );
 
@@ -1603,7 +1593,7 @@ async function findAndPlaceUserInBoard(userId, boardType) {
             const emptySlotRow = emptySlotRows[0];
             const parentUserId = emptySlotRow.userId;
 
-            for (let i = 1; i <= 6; i++) {
+            for (let i = 1; i <= 5; i++) {
                 const memberSlot = `member${i}`;
                 if (emptySlotRow[memberSlot] === null) {
                     await client.query(
@@ -1650,7 +1640,7 @@ async function processUserBoardUpgrade(userId) {
         await client.query('BEGIN');
 
         const { rows: ancestorRows } = await client.query(`
-            SELECT treelevel1, treelevel2, treelevel3, treelevel4, treelevel5, treelevel6
+            SELECT treelevel1, treelevel2, treelevel3, treelevel4
             FROM genealogy
             WHERE user_id = $1
         `, [userId]);
@@ -2436,7 +2426,7 @@ async function checkFullReferrals(userId) {
     try {
         // PostgreSQL uses $1 as a placeholder for parameters
         const result = await client.query(
-            `SELECT member1, member2, member3, member4, member5, member6 FROM genealogy WHERE user_id = $1`,
+            `SELECT member1, member2, member3, member4 FROM genealogy WHERE user_id = $1`,
             [userId]
         );
 
@@ -2453,7 +2443,7 @@ async function checkFullReferrals(userId) {
         // Check if each of the direct referrals also has all six members filled
         for (let memberId of directReferrals) {
             const nestedResult = await client.query(
-                `SELECT member1, member2, member3, member4, member5, member6 FROM genealogy WHERE user_id = $1`,
+                `SELECT member1, member2, member3, member4 FROM genealogy WHERE user_id = $1`,
                 [memberId]
             );
 
@@ -4988,7 +4978,7 @@ app.get('/my-team', authenticateToken, async (req, res) => {
 
         const team = {};
 
-        for (let level = 1; level <= 6; level++) {
+        for (let level = 1; level <= 4; level++) {
             // Fetch referrals for the current level
             const referrals = await getReferralsAtLevel(userId, level, client);
 
@@ -5036,7 +5026,7 @@ async function getReferralsAtLevel(userId, level, client) {
     if (level === 1) {
         // Direct referrals (Level 1: member1, member2, ..., member6)
         const { rows } = await client.query(`
-            SELECT member1, member2, member3, member4, member5, member6
+            SELECT member1, member2, member3, member4
             FROM genealogy
             WHERE user_id = $1
         `, [userId]);
@@ -5055,7 +5045,7 @@ async function getReferralsAtLevel(userId, level, client) {
 
         // Query to get members (member1, member2, ..., member6) of previous level referrals
         const { rows } = await client.query(`
-            SELECT member1, member2, member3, member4, member5, member6
+            SELECT member1, member2, member3, member4
             FROM genealogy
             WHERE user_id IN (${referralIds})
         `);
@@ -5132,7 +5122,7 @@ app.get('/silver-board-downline/:level', authenticateToken, async (req, res) => 
         const searchTerm = req.query.search || "";
         const offset = (page - 1) * pageSize;
 
-        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 6) {
+        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 5) {
             return res.status(400).json({ message: "Invalid level" });
         }
 
@@ -5203,7 +5193,7 @@ app.get('/gold-board-downline/:level', authenticateToken, async (req, res) => {
         const searchTerm = req.query.search || "";
         const offset = (page - 1) * pageSize;
 
-        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 6) {
+        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 5) {
             return res.status(400).json({ message: "Invalid level" });
         }
 
@@ -5276,7 +5266,7 @@ app.get('/diamond-board-downline/:level', authenticateToken, async (req, res) =>
         const searchTerm = req.query.search || "";
         const offset = (page - 1) * pageSize;
 
-        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 6) {
+        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 5) {
             return res.status(400).json({ message: "Invalid level" });
         }
 
@@ -5347,7 +5337,7 @@ app.get('/platinum-board-downline/:level', authenticateToken, async (req, res) =
         const searchTerm = req.query.search || "";
         const offset = (page - 1) * pageSize;
 
-        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 6) {
+        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 5) {
             return res.status(400).json({ message: "Invalid level" });
         }
 
@@ -5417,7 +5407,7 @@ app.get('/king-board-downline/:level', authenticateToken, async (req, res) => {
         const searchTerm = req.query.search || "";
         const offset = (page - 1) * pageSize;
 
-        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 6) {
+        if (isNaN(requestedLevel) || requestedLevel < 1 || requestedLevel > 5) {
             return res.status(400).json({ message: "Invalid level" });
         }
 
@@ -5609,7 +5599,7 @@ async function calculateLevelIncomeForBoard(userId, boardType, boardGenealogyTab
         const genealogyData = genealogyRows[0];
         const referrals = [];
 
-        for (let level = 1; level <= 6; level++) {
+        for (let level = 1; level <= 5; level++) {
             const memberIds = getReferralsAtLevelFromGenealogy(genealogyData, level); // Helper function (below)
             referrals.push(...memberIds); //Add referrals from all levels
         }
@@ -5671,7 +5661,7 @@ app.get('/tree-view', authenticateToken, async (req, res) => {
 
         const genealogyData = genealogyRows[0];
         const members = [];
-        for (let i = 1; i <= 6; i++) {
+        for (let i = 1; i <= 4; i++) {
             const memberId = genealogyData[`member${i}`];
             if (memberId) members.push(memberId);
         }
@@ -5771,7 +5761,7 @@ app.get('/silver-board-tree-view', authenticateToken, async (req, res) => {
         const silverBoardMembers = [];
 
 
-        for (let i = 1; i <= 6; i++) {
+        for (let i = 1; i <= 5; i++) {
             const memberId = silverBoardGenealogyData[`member${i}`];
             if (memberId) silverBoardMembers.push(memberId);
         }
@@ -5853,8 +5843,6 @@ app.get('/rebirth-income/:id', authenticateToken, async (req, res) => {
                        WHEN g.treelevel2 = $1 THEN 2
                        WHEN g.treelevel3 = $1 THEN 3
                        WHEN g.treelevel4 = $1 THEN 4
-                       WHEN g.treelevel5 = $1 THEN 5
-                       WHEN g.treelevel6 = $1 THEN 6
                        ELSE NULL
                    END AS level
             FROM wallettransactions wt
@@ -5863,7 +5851,7 @@ app.get('/rebirth-income/:id', authenticateToken, async (req, res) => {
             LEFT JOIN genealogy g ON g.user_id = ru.user_id -- Match referral_id in genealogy
             WHERE wt.transactiontype = 'REBIRTH_INCOME'
               AND wt.toid = $1
-              AND ($1 IN (g.treelevel1, g.treelevel2, g.treelevel3, g.treelevel4, g.treelevel5, g.treelevel6))
+              AND ($1 IN (g.treelevel1, g.treelevel2, g.treelevel3, g.treelevel4))
               AND (LOWER(u.username) LIKE LOWER($2) OR LOWER(u.user_id) LIKE LOWER($3) OR 
                    LOWER(ru.username) LIKE LOWER($4) OR LOWER(ru.user_id) LIKE LOWER($5)) 
             ORDER BY wt.transactiondate DESC
@@ -5879,7 +5867,7 @@ app.get('/rebirth-income/:id', authenticateToken, async (req, res) => {
             LEFT JOIN genealogy g ON g.user_id = ru.user_id -- Match referral_id in genealogy
             WHERE wt.transactiontype = 'REBIRTH_INCOME'
               AND wt.toid = $1
-              AND ($1 IN (g.treelevel1, g.treelevel2, g.treelevel3, g.treelevel4, g.treelevel5, g.treelevel6))
+              AND ($1 IN (g.treelevel1, g.treelevel2, g.treelevel3, g.treelevel4))
               AND (LOWER(u.username) LIKE LOWER($2) OR LOWER(u.user_id) LIKE LOWER($3) OR 
                    LOWER(ru.username) LIKE LOWER($4) OR LOWER(ru.user_id) LIKE LOWER($5))
         `, [requestedUserId, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`]);
@@ -5909,7 +5897,7 @@ app.get('/silver-board-team', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
         const team = {};
 
-        for (let level = 1; level <= 6; level++) { // Silver board has 6 levels
+        for (let level = 1; level <= 5; level++) { // Silver board has 6 levels
             const referrals = await getSilverBoardReferralsAtLevel(userId, level, client);
 
             const levelData = {
@@ -5945,7 +5933,7 @@ async function getSilverBoardReferralsAtLevel(userId, level, client) {
     if (level === 1) {
         try {
             const { rows } = await client.query(`
-              SELECT member1, member2, member3, member4,member5,member6
+              SELECT member1, member2, member3, member4,member5
               FROM silverboardgenealogy 
               WHERE user_id = $1
           `, [userId]);
@@ -5966,7 +5954,7 @@ async function getSilverBoardReferralsAtLevel(userId, level, client) {
         const referralIds = previousLevelReferrals.map(r => `'${r}'`).join(',');
         try {
             const { rows } = await client.query(`
-                SELECT member1, member2, member3, member4, member5, member6
+                SELECT member1, member2, member3, member4, member5
                 FROM silverboardgenealogy -- Silver board genealogy table
                 WHERE user_id IN (${referralIds})
             `);
@@ -5985,7 +5973,7 @@ app.get('/gold-board-team', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
         const team = {};
 
-        for (let level = 1; level <= 6; level++) { // Silver board has 6 levels
+        for (let level = 1; level <= 5; level++) { // Silver board has 6 levels
             const referrals = await getGoldBoardReferralsAtLevel(userId, level, client);
 
             const levelData = {
@@ -6021,7 +6009,7 @@ async function getGoldBoardReferralsAtLevel(userId, level, client) {
     if (level === 1) {
         try {
             const { rows } = await client.query(`
-              SELECT member1, member2, member3, member4,member5,member6
+              SELECT member1, member2, member3, member4,member5
               FROM goldboardgenealogy 
               WHERE user_id = $1
           `, [userId]);
@@ -6042,7 +6030,7 @@ async function getGoldBoardReferralsAtLevel(userId, level, client) {
         const referralIds = previousLevelReferrals.map(r => `'${r}'`).join(',');
         try {
             const { rows } = await client.query(`
-                SELECT member1, member2, member3, member4, member5, member6
+                SELECT member1, member2, member3, member4, member5
                 FROM goldboardgenealogy 
                 WHERE user_id IN (${referralIds})
             `);
@@ -6061,7 +6049,7 @@ app.get('/diamond-board-team', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
         const team = {};
 
-        for (let level = 1; level <= 6; level++) { // Silver board has 6 levels
+        for (let level = 1; level <= 5; level++) { // Silver board has 6 levels
             const referrals = await getdiamondBoardReferralsAtLevel(userId, level, client);
 
             const levelData = {
@@ -6097,7 +6085,7 @@ async function getdiamondBoardReferralsAtLevel(userId, level, client) {
     if (level === 1) {
         try {
             const { rows } = await client.query(`
-              SELECT member1, member2, member3, member4,member5,member6
+              SELECT member1, member2, member3, member4,member5
               FROM diamondboardgenealogy 
               WHERE user_id = $1
           `, [userId]);
@@ -6118,7 +6106,7 @@ async function getdiamondBoardReferralsAtLevel(userId, level, client) {
         const referralIds = previousLevelReferrals.map(r => `'${r}'`).join(',');
         try {
             const { rows } = await client.query(`
-                SELECT member1, member2, member3, member4, member5, member6
+                SELECT member1, member2, member3, member4, member5
                 FROM diamondboardgenealogy 
                 WHERE user_id IN (${referralIds})
             `);
@@ -6137,7 +6125,7 @@ app.get('/platinum-board-team', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
         const team = {};
 
-        for (let level = 1; level <= 6; level++) { // Silver board has 6 levels
+        for (let level = 1; level <= 5; level++) { // Silver board has 6 levels
             const referrals = await getplatinumBoardReferralsAtLevel(userId, level, client);
 
             const levelData = {
@@ -6173,7 +6161,7 @@ async function getplatinumBoardReferralsAtLevel(userId, level, client) {
     if (level === 1) {
         try {
             const { rows } = await client.query(`
-              SELECT member1, member2, member3, member4,member5,member6
+              SELECT member1, member2, member3, member4,member5
               FROM platiumboardgenealogy 
               WHERE user_id = $1
           `, [userId]);
@@ -6194,7 +6182,7 @@ async function getplatinumBoardReferralsAtLevel(userId, level, client) {
         const referralIds = previousLevelReferrals.map(r => `'${r}'`).join(',');
         try {
             const { rows } = await client.query(`
-                SELECT member1, member2, member3, member4, member5, member6
+                SELECT member1, member2, member3, member4, member5
                 FROM platinumboardgenealogy 
                 WHERE user_id IN (${referralIds})
             `);
@@ -6213,7 +6201,7 @@ app.get('/king-board-team', authenticateToken, async (req, res) => {
         const userId = req.user.userId;
         const team = {};
 
-        for (let level = 1; level <= 6; level++) { // Silver board has 6 levels
+        for (let level = 1; level <= 5; level++) { // Silver board has 6 levels
             const referrals = await getkingBoardReferralsAtLevel(userId, level, client);
 
             const levelData = {
@@ -6249,7 +6237,7 @@ async function getkingBoardReferralsAtLevel(userId, level, client) {
     if (level === 1) {
         try {
             const { rows } = await client.query(`
-              SELECT member1, member2, member3, member4,member5,member6
+              SELECT member1, member2, member3, member4,member5
               FROM kingboardgenealogy 
               WHERE user_id = $1
           `, [userId]);
@@ -6270,7 +6258,7 @@ async function getkingBoardReferralsAtLevel(userId, level, client) {
         const referralIds = previousLevelReferrals.map(r => `'${r}'`).join(',');
         try {
             const { rows } = await client.query(`
-                SELECT member1, member2, member3, member4, member5, member6
+                SELECT member1, member2, member3, member4, member5
                 FROM kingboardgenealogy 
                 WHERE user_id IN (${referralIds})
             `);
@@ -7311,8 +7299,6 @@ app.get('/admin/silver-board-income', authenticateToken, authorizeAdmin, async (
             WHEN g.member2 = f.user_id THEN 2
             WHEN g.member3 = f.user_id THEN 3
             WHEN g.member4 = f.user_id THEN 4
-            WHEN g.member5 = f.user_id THEN 5
-            WHEN g.member6 = f.user_id THEN 6
             ELSE NULL
         END, 0) AS level,
     (SELECT COUNT(*) FROM users WHERE introducer_id = f.user_id) as total_referrals,
@@ -7382,8 +7368,6 @@ app.get('/admin/gold-board-income', authenticateToken, authorizeAdmin, async (re
             WHEN g.member2 = f.user_id THEN 2
             WHEN g.member3 = f.user_id THEN 3
             WHEN g.member4 = f.user_id THEN 4
-            WHEN g.member5 = f.user_id THEN 5
-            WHEN g.member6 = f.user_id THEN 6
             ELSE NULL
         END, 0) AS level,
     (SELECT COUNT(*) FROM users WHERE introducer_id = f.user_id) as total_referrals,
@@ -7453,8 +7437,6 @@ app.get('/admin/diamond-board-income', authenticateToken, authorizeAdmin, async 
             WHEN g.member2 = f.user_id THEN 2
             WHEN g.member3 = f.user_id THEN 3
             WHEN g.member4 = f.user_id THEN 4
-            WHEN g.member5 = f.user_id THEN 5
-            WHEN g.member6 = f.user_id THEN 6
             ELSE NULL
         END, 0) AS level,
     (SELECT COUNT(*) FROM users WHERE introducer_id = f.user_id) as total_referrals,
@@ -7524,8 +7506,6 @@ app.get('/admin/platinum-board-income', authenticateToken, authorizeAdmin, async
             WHEN g.member2 = f.user_id THEN 2
             WHEN g.member3 = f.user_id THEN 3
             WHEN g.member4 = f.user_id THEN 4
-            WHEN g.member5 = f.user_id THEN 5
-            WHEN g.member6 = f.user_id THEN 6
             ELSE NULL
         END, 0) AS level,
     (SELECT COUNT(*) FROM users WHERE introducer_id = f.user_id) as total_referrals,
@@ -7596,8 +7576,6 @@ app.get('/admin/king-board-income', authenticateToken, authorizeAdmin, async (re
             WHEN g.member2 = f.user_id THEN 2
             WHEN g.member3 = f.user_id THEN 3
             WHEN g.member4 = f.user_id THEN 4
-            WHEN g.member5 = f.user_id THEN 5
-            WHEN g.member6 = f.user_id THEN 6
             ELSE NULL
         END, 0) AS level,
     (SELECT COUNT(*) FROM users WHERE introducer_id = f.user_id) as total_referrals,
@@ -8160,7 +8138,7 @@ async function countReferralsFromMemberN(rebirthId, client) {
 
 
     const { rows: level1Data } = await client.query(`
-        SELECT member1, member2, member3, member4, member5, member6
+        SELECT member1, member2, member3, member4
         FROM genealogy
         WHERE user_id = $1
     `, [memberUserId]);
@@ -8179,7 +8157,7 @@ async function countReferralsFromMemberN(rebirthId, client) {
             SELECT COUNT(*) as count
             FROM genealogy
             WHERE user_id IN (${level1Referrals.map(id => client.escapeLiteral(id)).join(',')})
-              AND (member1 IS NOT NULL OR member2 IS NOT NULL OR member3 IS NOT NULL OR member4 IS NOT NULL OR member5 IS NOT NULL OR member6 IS NOT NULL);
+              AND (member1 IS NOT NULL OR member2 IS NOT NULL OR member3 IS NOT NULL OR member4 IS NOT NULL);
         `;
         const { rows: level2Result } = await client.query(level2Query);
         level2Count = parseInt(level2Result[0].count, 10);
@@ -8254,8 +8232,8 @@ app.get('/genealogy/:userId/:level', authenticateToken, async (req, res) => {
         const userId = req.params.userId;
         const level = parseInt(req.params.level, 10); // Get the level from the URL parameter
 
-        if (isNaN(level) || level < 1 || level > 6) {
-            return res.status(400).json({ message: 'Invalid level. Level must be between 1 and 6.' });
+        if (isNaN(level) || level < 1 || level > 4) {
+            return res.status(400).json({ message: 'Invalid level. Level must be between 1 and 4.' });
         }
 
         // Dynamically construct the query based on the requested level
@@ -8780,7 +8758,7 @@ app.get('/download/excel', authenticateToken, async (req, res) => {
         const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
 
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=members.xlsx');
+        res.setHeader('Content-Disposition', 'attachment; filename=aghan_members.xlsx');
         res.send(excelBuffer);
     } catch (error) {
         console.error('Error generating Excel:', error);
@@ -9359,7 +9337,7 @@ app.get('/admin/download/payout-excel', authenticateToken, authorizeAdmin, async
 
         // Send response to client with updated headers
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=payout_history.xlsx');
+        res.setHeader('Content-Disposition', 'attachment; filename=aghan_payout_history.xlsx');
         res.send(excelBuffer);
     } catch (error) {
         console.error('Error generating Excel:', error);
@@ -9476,7 +9454,7 @@ app.get('/admin/download/members-excel', authenticateToken, authorizeAdmin, asyn
         // Generate Excel file
         const excelBuffer = xlsx.write(workbook, { type: 'buffer', bookType: 'xlsx' });
         res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-        res.setHeader('Content-Disposition', 'attachment; filename=members.xlsx');
+        res.setHeader('Content-Disposition', 'attachment; filename=aghan_members.xlsx');
         res.send(excelBuffer);
     } catch (error) {
         console.error('Error generating Excel:', error);
