@@ -9613,8 +9613,6 @@ app.get('/users/undelivered-achievers', authenticateToken, async (req, res) => {
     }
 });
 
-
-
 app.post('/users/deliver-achievers', authenticateToken, async (req, res) => {
   const client = await pgPool.connect();
   try {
@@ -9670,11 +9668,11 @@ app.get('/generate-excel/undelivered-achievers', authenticateToken, async (req, 
     const params = searchTerm ? [`%${searchTerm}%`] : [];
     const { rows: undeliveredAchievers } = await client.query(query, params);
 
-    const worksheet = XLSX.utils.json_to_sheet(undeliveredAchievers);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Undelivered Achievers");
+    const worksheet = xlsx.utils.json_to_sheet(undeliveredAchievers);
+    const workbook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(workbook, worksheet, "Undelivered Achievers");
 
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+    const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
     res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     res.setHeader('Content-Disposition', 'attachment; filename=undelivered_achievers.xlsx');
