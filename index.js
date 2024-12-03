@@ -76,13 +76,13 @@ const pgPool = new Pool({
     password: 'suryaprakash123',
     port: 5432,
     ssl: {
-        rejectUnauthorized: false, 
+        rejectUnauthorized: false,
     },
 });
 
 
 app.get('/', (req, res) => {
-  res.send('CORS with two origins is configured!');
+    res.send('CORS with two origins is configured!');
 });
 
 
@@ -9488,28 +9488,28 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         console.log("page:", page);
 
         const query = `
-    SELECT 
-        COUNT(*) OVER () AS total_count,
-        user_id, 
-        username, 
-        introducer_id, 
-        (SELECT COUNT(*) FROM users WHERE introducer_id = users.user_id) as referral_count,
-        mobile, 
-        email, 
-        created_at,
-        lock_status,
-        withdrawal_lock_status
-    FROM users
-    WHERE role != 'admin'
-      AND (
-            $1::TEXT IS NULL OR 
-            $1::TEXT = '' OR 
-            LOWER(username) LIKE LOWER($2::TEXT) OR 
-            LOWER(user_id::TEXT) LIKE LOWER($2::TEXT)
-          )
-      AND ($3::DATE IS NULL OR created_at >= $3::DATE)
-      AND ($4::DATE IS NULL OR created_at <= $4::DATE)
-    ORDER BY id ASC LIMIT $5 OFFSET $6
+    SELECT
+                COUNT(*) OVER () AS total_count,
+                u.user_id,
+                u.username,
+                u.introducer_id,
+                u.mobile,
+                u.email,
+                u.created_at,
+                u.lock_status,
+                u.withdrawal_lock_status,
+                COALESCE(b.account_holder_name, '') as bank_account_holder,
+                COALESCE(b.account_number, '') as bank_account_number,
+                COALESCE(b.bank_name, '') as bank_name,
+                COALESCE(b.bank_ifsc, '') as bank_ifsc,
+                COALESCE(b.bank_branch, '') as bank_branch,
+                COALESCE(upi.upi_address, '') as upi_address,
+                COALESCE(upi.image_name, '') as upi_image,
+                (SELECT COUNT(*) FROM users WHERE introducer_id = u.user_id) as referral_count
+            FROM users u
+            LEFT JOIN banks b ON u.user_id = b.user_id
+            LEFT JOIN upis upi ON u.user_id = upi.user_id
+            WHERE u.role != 'admin'
 `;
 
 
@@ -9526,7 +9526,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
 
 
         const { rows: members } = await client.query(query, queryParams);
-
+        console.log(members)
         //Handle empty result set
         if (members.length === 0) {
             return res.status(404).json({ message: 'No members found.' });
@@ -9614,50 +9614,50 @@ app.get('/users/undelivered-achievers', authenticateToken, async (req, res) => {
 });
 
 app.post('/users/deliver-achievers', authenticateToken, async (req, res) => {
-  const client = await pgPool.connect();
-  try {
-    const userIds = req.body.userIds; // Array of user IDs to mark as delivered
+    const client = await pgPool.connect();
+    try {
+        const userIds = req.body.userIds; // Array of user IDs to mark as delivered
 
-    if (!Array.isArray(userIds) || userIds.length === 0) {
-      return res.status(400).json({ message: 'Invalid user IDs provided.' });
-    }
-    
-    // Use a transaction to ensure all updates or inserts happen atomically.
-    await client.query('BEGIN');
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            return res.status(400).json({ message: 'Invalid user IDs provided.' });
+        }
 
-    const insertQuery = `
+        // Use a transaction to ensure all updates or inserts happen atomically.
+        await client.query('BEGIN');
+
+        const insertQuery = `
         INSERT INTO achieved_users (user_id, reward, achieved_at, status) 
         VALUES ($1, $2, NOW(), 'delivered')  returning *;`;
 
 
-    //Assuming a reward will be a part of the request:
-    const reward = req.body.reward || 'Default Reward'; // Provide a default reward if none is given
+        //Assuming a reward will be a part of the request:
+        const reward = req.body.reward || 'Default Reward'; // Provide a default reward if none is given
 
-    const results = [];
-    for(const userId of userIds){
-        const insertResult = await client.query(insertQuery, [userId, reward]);
-        results.push(insertResult.rows[0]); // Store inserted rows
+        const results = [];
+        for (const userId of userIds) {
+            const insertResult = await client.query(insertQuery, [userId, reward]);
+            results.push(insertResult.rows[0]); // Store inserted rows
+        }
+
+
+        await client.query('COMMIT');
+
+        res.json({ message: 'Achievers delivered successfully', results });
+    } catch (error) {
+        await client.query('ROLLBACK'); // Rollback if any insert fails
+        console.error('Error delivering achievers:', error);
+        res.status(500).json({ message: 'Failed to deliver achievers.' });
+    } finally {
+        client.release();
     }
-
-
-    await client.query('COMMIT');
-
-    res.json({ message: 'Achievers delivered successfully', results });
-  } catch (error) {
-    await client.query('ROLLBACK'); // Rollback if any insert fails
-    console.error('Error delivering achievers:', error);
-    res.status(500).json({ message: 'Failed to deliver achievers.' });
-  } finally {
-    client.release();
-  }
 });
 
 app.get('/generate-excel/undelivered-achievers', authenticateToken, async (req, res) => {
-  const client = await pgPool.connect();
-  try {
-    const searchTerm = req.query.search || '';
+    const client = await pgPool.connect();
+    try {
+        const searchTerm = req.query.search || '';
 
-    const query = `
+        const query = `
       SELECT user_id, username
       FROM users
       WHERE user_id NOT IN (SELECT user_id FROM achieved_users)
@@ -9665,26 +9665,26 @@ app.get('/generate-excel/undelivered-achievers', authenticateToken, async (req, 
       ORDER BY user_id
     `;
 
-    const params = searchTerm ? [`%${searchTerm}%`] : [];
-    const { rows: undeliveredAchievers } = await client.query(query, params);
+        const params = searchTerm ? [`%${searchTerm}%`] : [];
+        const { rows: undeliveredAchievers } = await client.query(query, params);
 
-    const worksheet = xlsx.utils.json_to_sheet(undeliveredAchievers);
-    const workbook = xlsx.utils.book_new();
-    xlsx.utils.book_append_sheet(workbook, worksheet, "Undelivered Achievers");
+        const worksheet = xlsx.utils.json_to_sheet(undeliveredAchievers);
+        const workbook = xlsx.utils.book_new();
+        xlsx.utils.book_append_sheet(workbook, worksheet, "Undelivered Achievers");
 
-    const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
+        const excelBuffer = xlsx.write(workbook, { bookType: 'xlsx', type: 'buffer' });
 
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename=undelivered_achievers.xlsx');
+        res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+        res.setHeader('Content-Disposition', 'attachment; filename=undelivered_achievers.xlsx');
 
-    res.send(excelBuffer);  // Send the buffer directly as the response
+        res.send(excelBuffer);  // Send the buffer directly as the response
 
-  } catch (error) {
-    console.error('Error generating Excel:', error);
-    res.status(500).json({ message: 'Failed to generate Excel file.' });
-  } finally {
-    client.release();
-  }
+    } catch (error) {
+        console.error('Error generating Excel:', error);
+        res.status(500).json({ message: 'Failed to generate Excel file.' });
+    } finally {
+        client.release();
+    }
 });
 
 app.listen(port, () => {
