@@ -9511,17 +9511,31 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
             LEFT JOIN upis upi ON u.user_id = upi.user_id
             WHERE u.role != 'admin'
 `;
+        const queryParams = [];
+        let paramIndex = 1;
+        const whereClauses = [];
 
+        if (searchTerm) {
+            whereClauses.push(`LOWER(u.username) LIKE LOWER($${paramIndex++}) OR LOWER(u.user_id) LIKE LOWER($${paramIndex++}) OR LOWER(u.mobile) LIKE LOWER($${paramIndex++})`);
+            queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
+        }
 
-        const queryParams = [
-            searchTerm || null,
-            `%${searchTerm || ''}%`,
-            fromDate || null,
-            toDate || null,
-            limit,
-            offset,
-        ];
+        if (fromDate) {
+            whereClauses.push(`u.created_at >= $${paramIndex++}`);
+            queryParams.push(fromDate);
+        }
 
+        if (toDate) {
+            whereClauses.push(`u.created_at <= $${paramIndex++}`);
+            queryParams.push(toDate);
+        }
+
+        if (whereClauses.length > 0) {
+            query += ` WHERE ${whereClauses.join(' AND ')}`;
+        }
+
+        query += ` ORDER BY u.user_id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        queryParams.push(pageSize, offset);
 
 
 
