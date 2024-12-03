@@ -9487,7 +9487,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         console.log("pageSize:", pageSize);
         console.log("page:", page);
 
-        const query = `
+        let query = `
             SELECT
                 COUNT(*) OVER () AS total_count,
                 u.user_id,
