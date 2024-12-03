@@ -9526,7 +9526,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
 
 
         const { rows: members } = await client.query(query, queryParams);
-
+        console.log(members)
         //Handle empty result set
         if (members.length === 0) {
             return res.status(404).json({ message: 'No members found.' });
