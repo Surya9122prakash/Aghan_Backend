@@ -4886,36 +4886,35 @@ app.get('/rebirth-bonus-status', authenticateToken, async (req, res) => {
 app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
     const client = await pgPool.connect();
     try {
-        const draw = parseInt(req.query.draw, 10);
-        const start = parseInt(req.query.start, 10);
-        const length = parseInt(req.query.length, 10);
-        const search = req.query.search?.value || ""; // Default to an empty string if search is undefined or null
+        // Safely parse query parameters with default values
+        const draw = req.query.draw ? parseInt(req.query.draw, 10) : 1;
+        const start = req.query.start ? parseInt(req.query.start, 10) : 0;
+        const length = req.query.length ? parseInt(req.query.length, 10) : 10;
+        const search = req.query.search?.value || ""; 
 
         // Base queries
         let query = `SELECT username as member, ip_address, browser, 
             TO_CHAR(logged_at, 'YYYY/MM/DD HH24:MI:SS') AS date 
             FROM user_logs`;
         let countQuery = `SELECT COUNT(*) AS count FROM user_logs`;
-
+        
         // Parameters
         const queryParams = [];
         const countParams = [];
 
         // Handle search filtering
         if (search && search.trim() !== "") {
-            const whereClause = ` WHERE username LIKE $1 OR ip_address LIKE $1 OR browser LIKE $1`;
+            const whereClause = ` WHERE username ILIKE $1 OR ip_address ILIKE $1 OR browser ILIKE $1`;
             query += whereClause;
             countQuery += whereClause;
-            const searchValue = `%${search}%`;  // Wrap search value with % for LIKE matching
-            queryParams.push(searchValue);
-            countParams.push(searchValue);
-        } else {
-            // If search is empty, we should not include any WHERE clause or pass '%' as the search term
-            query += " WHERE false";  // Add a condition that will never match
+            
+            queryParams.push(`%${search}%`);
+            countParams.push(`%${search}%`);
         }
 
         // Add ordering, limit, and offset for the main query
-        query += ` ORDER BY logged_at DESC LIMIT $2 OFFSET $3`;
+        const paramIndex = queryParams.length + 1;
+        query += ` ORDER BY logged_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
         queryParams.push(length, start);
 
         // Execute the queries
@@ -4939,7 +4938,6 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
         client.release();
     }
 });
-
 async function processRebirthBonuses() {
     const client = await pgPool.connect();;
     try {
