@@ -4886,10 +4886,10 @@ app.get('/rebirth-bonus-status', authenticateToken, async (req, res) => {
 app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
     const client = await pgPool.connect();
     try {
-        const draw = parseInt(req.query.draw);
-        const start = parseInt(req.query.start);
-        const length = parseInt(req.query.length);
-        const search = req.query.search ? req.query.search.value : "";
+        const draw = parseInt(req.query.draw, 10);
+        const start = parseInt(req.query.start, 10);
+        const length = parseInt(req.query.length, 10);
+        const search = req.query.search?.value || "";
 
         // Base queries
         let query = `
@@ -4907,8 +4907,9 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
             const whereClause = ` WHERE username ILIKE $1 OR ip_address ILIKE $1 OR browser ILIKE $1`;
             query += whereClause;
             countQuery += whereClause;
-            queryParams.push(`%${search}%`);
-            countParams.push(`%${search}%`);
+            const searchValue = `%${search}%`;
+            queryParams.push(searchValue);
+            countParams.push(searchValue);
         }
 
         // Add ordering, limit, and offset for the main query
