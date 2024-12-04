@@ -9533,7 +9533,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
             return res.status(404).json({ message: 'No members found.' });
         }
 
-        const body = paginatedMembers.map((member, index) => [
+        const body = members.map((member, index) => [
             index + 1, // Dynamically compute the serial number
             member.userId,
             member.username,
