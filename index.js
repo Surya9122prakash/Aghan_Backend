@@ -4910,9 +4910,8 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
             queryParams.push(searchValue);
             countParams.push(searchValue);
         } else {
-            // If search is empty, use a wildcard to match all records
-            queryParams.push('%');
-            countParams.push('%');
+            // If search is empty, we should not include any WHERE clause or pass '%' as the search term
+            query += " WHERE false";  // Add a condition that will never match
         }
 
         // Add ordering, limit, and offset for the main query
