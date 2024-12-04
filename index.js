@@ -9534,7 +9534,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         }
 
         const paginatedMembers = members.map((member, index) => ({
-            sno: index + 1,
+            sno: index + 1,  // Adding custom serial number
             userId: member.user_id,
             username: member.username,
             introducerId: member.introducer_id,
@@ -9549,7 +9549,12 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         const doc = new jsPDF();
         doc.setFontSize(10);
 
-        const headers = Object.keys(paginatedMembers[0]).map(key => key.replace(/([A-Z])/g, " $1").trim().toUpperCase());
+        const headers = Object.keys(paginatedMembers[0]).map(key =>
+            key.replace(/([A-Z])/g, " $1").trim().toUpperCase()
+        );
+
+        console.log('Headers:', headers);
+        console.log('Paginated Members:', paginatedMembers);
 
         doc.autoTable({
             head: [headers],
