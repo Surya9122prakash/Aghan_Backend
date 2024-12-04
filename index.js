@@ -4904,7 +4904,7 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
 
         // Handle search filtering
         if (search) {
-            const whereClause = ` WHERE username ILIKE $1 OR ip_address ILIKE $1 OR browser ILIKE $1`;
+            const whereClause = ` WHERE username LIKE $1 OR ip_address LIKE $1 OR browser LIKE $1`;
             query += whereClause;
             countQuery += whereClause;
             const searchValue = `%${search}%`;
