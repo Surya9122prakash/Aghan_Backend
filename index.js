@@ -4906,10 +4906,13 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
             const whereClause = ` WHERE username LIKE $1 OR ip_address LIKE $1 OR browser LIKE $1`;
             query += whereClause;
             countQuery += whereClause;
-            const searchValue = `%${search}%`;
-            console.log(searchValue)
+            const searchValue = `%${search}%`;  // Wrap search value with % for LIKE matching
             queryParams.push(searchValue);
             countParams.push(searchValue);
+        } else {
+            // If search is empty, use a wildcard to match all records
+            queryParams.push('%');
+            countParams.push('%');
         }
 
         // Add ordering, limit, and offset for the main query
@@ -4937,7 +4940,6 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
         client.release();
     }
 });
-
 
 async function processRebirthBonuses() {
     const client = await pgPool.connect();;
