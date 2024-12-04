@@ -4889,11 +4889,10 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
         const draw = parseInt(req.query.draw, 10);
         const start = parseInt(req.query.start, 10);
         const length = parseInt(req.query.length, 10);
-        const search = req.query.search?.value || "";
+        const search = req.query.search?.value || ""; // Default to an empty string if search is undefined or null
 
         // Base queries
-        let query = `
-            SELECT username as member, ip_address, browser, 
+        let query = `SELECT username as member, ip_address, browser, 
             TO_CHAR(logged_at, 'YYYY/MM/DD HH24:MI:SS') AS date 
             FROM user_logs`;
         let countQuery = `SELECT COUNT(*) AS count FROM user_logs`;
@@ -4903,7 +4902,7 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
         const countParams = [];
 
         // Handle search filtering
-        if (search) {
+        if (search && search.trim() !== "") {
             const whereClause = ` WHERE username LIKE $1 OR ip_address LIKE $1 OR browser LIKE $1`;
             query += whereClause;
             countQuery += whereClause;
