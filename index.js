@@ -9446,7 +9446,7 @@ app.get('/admin/download/members-excel', authenticateToken, authorizeAdmin, asyn
         } else {
             // Provide a default header row if no data is available
             const headers = [
-                'S.NO', 'User ID', 'Username', 'Introducer ID', 'Referral Count',
+                'S.NO', 'User ID', 'Username', 'Introducer ID',
                 'Mobile', 'Email', 'Created At', 'Lock Status', 'Withdrawal Lock Status',
                 'Bank Account Holder', 'Bank Account Number', 'Bank Name',
                 'Bank IFSC', 'Bank Branch', 'UPI Address', 'UPI Image'
@@ -9538,10 +9538,8 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
             member.user_id,
             member.username,
             member.introducer_id,
-            member.referral_count,
             member.mobile,
             member.email,
-            member.created_at,
             member.lock_status,
             member.withdrawal_lock_status,
         ]);
@@ -9551,7 +9549,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         
         // Pass headers and transformed body to autoTable
         doc.autoTable({
-            head: [['SNO', 'USER ID', 'USERNAME', 'INTRODUCER ID', 'REFERRAL COUNT', 'MOBILE', 'EMAIL', 'CREATED AT', 'LOCK STATUS', 'WITHDRAWAL LOCK STATUS']],
+            head: [['SNO', 'USER ID', 'USERNAME', 'INTRODUCER ID', 'MOBILE', 'EMAIL', 'LOCK STATUS', 'WITHDRAWAL LOCK STATUS']],
             body, // Array of arrays
             columnStyles: {
                 0: { cellWidth: 15 }, // Optional: adjust column width for serial number
@@ -9561,7 +9559,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
 
         const pdfBuffer = doc.output('arraybuffer');
         res.setHeader('Content-Type', 'application/pdf');
-        res.setHeader('Content-Disposition', 'attachment; filename=members.pdf');
+        res.setHeader('Content-Disposition', 'attachment; filename=aghan_members.pdf');
         res.send(Buffer.from(pdfBuffer));
     } catch (error) {
         console.error('Error generating PDF:', error);
