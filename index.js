@@ -9535,15 +9535,15 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
 
         const body = members.map((member, index) => [
             index + 1, // Dynamically compute the serial number
-            member.userId,
+            member.user_id,
             member.username,
-            member.introducerId,
-            member.referralCount,
+            member.introducer_id,
+            member.referral_count,
             member.mobile,
             member.email,
-            member.createdAt,
-            member.lockStatus,
-            member.withdrawalLockStatus,
+            member.created_at,
+            member.lock_status,
+            member.withdrawal_lock_status,
         ]);
 
         const doc = jsPDF();
