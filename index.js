@@ -9549,9 +9549,7 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         const doc = new jsPDF();
         doc.setFontSize(10);
 
-        const headers = Object.keys(paginatedMembers[0]).map(key =>
-            key.replace(/([A-Z])/g, " $1").trim().toUpperCase()
-        );
+        const headers = ['sno', 'userId', 'username', 'introducerId', 'referralCount', 'mobile', 'email', 'createdAt', 'lockStatus', 'withdrawalLockStatus'];
 
         console.log('Headers:', headers);
         console.log('Paginated Members:', paginatedMembers);
