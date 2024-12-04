@@ -9533,34 +9533,31 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
             return res.status(404).json({ message: 'No members found.' });
         }
 
-        const paginatedMembers = members.map((member, index) => ({
-            sno: index + 1,  // Adding custom serial number
-            userId: member.user_id,
-            username: member.username,
-            introducerId: member.introducer_id,
-            referralCount: member.referral_count,
-            mobile: member.mobile,
-            email: member.email,
-            createdAt: member.created_at,
-            lockStatus: member.lock_status,
-            withdrawalLockStatus: member.withdrawal_lock_status,
-        }));
+        const body = paginatedMembers.map((member, index) => [
+            index + 1, // Dynamically compute the serial number
+            member.userId,
+            member.username,
+            member.introducerId,
+            member.referralCount,
+            member.mobile,
+            member.email,
+            member.createdAt,
+            member.lockStatus,
+            member.withdrawalLockStatus,
+        ]);
 
-        const doc = new jsPDF();
-        doc.setFontSize(10);
-
-        const headers = ['sno', 'userId', 'username', 'introducerId', 'referralCount', 'mobile', 'email', 'createdAt', 'lockStatus', 'withdrawalLockStatus'];
-
-        console.log('Headers:', headers);
-        console.log('Paginated Members:', paginatedMembers);
-
+        const doc = jsPDF();
+        doc.setFontSize(10)
+        
+        // Pass headers and transformed body to autoTable
         doc.autoTable({
-            head: [headers],
-            body: paginatedMembers,
+            head: [['SNO', 'USER ID', 'USERNAME', 'INTRODUCER ID', 'REFERRAL COUNT', 'MOBILE', 'EMAIL', 'CREATED AT', 'LOCK STATUS', 'WITHDRAWAL LOCK STATUS']],
+            body, // Array of arrays
             columnStyles: {
-                0: { cellWidth: 15 },
+                0: { cellWidth: 15 }, // Optional: adjust column width for serial number
             },
         });
+        
 
         const pdfBuffer = doc.output('arraybuffer');
         res.setHeader('Content-Type', 'application/pdf');
