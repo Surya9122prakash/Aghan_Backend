@@ -9486,37 +9486,38 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
         console.log("searchTerm:", searchTerm);
         console.log("pageSize:", pageSize);
         console.log("page:", page);
-
         let query = `
-            SELECT
-                COUNT(*) OVER () AS total_count,
-                u.user_id,
-                u.username,
-                u.introducer_id,
-                u.mobile,
-                u.email,
-                u.created_at,
-                u.lock_status,
-                u.withdrawal_lock_status,
-                COALESCE(b.account_holder_name, '') as bank_account_holder,
-                COALESCE(b.account_number, '') as bank_account_number,
-                COALESCE(b.bank_name, '') as bank_name,
-                COALESCE(b.bank_ifsc, '') as bank_ifsc,
-                COALESCE(b.bank_branch, '') as bank_branch,
-                COALESCE(upi.upi_address, '') as upi_address,
-                COALESCE(upi.image_name, '') as upi_image,
-                (SELECT COUNT(*) FROM users WHERE introducer_id = u.user_id) as referral_count
-            FROM users u
-            LEFT JOIN banks b ON u.user_id = b.user_id
-            LEFT JOIN upis upi ON u.user_id = upi.user_id
-            WHERE u.role != 'admin'
-`;
+        SELECT
+            COUNT(*) OVER () AS total_count,
+            u.user_id,
+            u.username,
+            u.introducer_id,
+            u.mobile,
+            u.email,
+            u.created_at,
+            u.lock_status,
+            u.withdrawal_lock_status,
+            COALESCE(b.account_holder_name, '') as bank_account_holder,
+            COALESCE(b.account_number, '') as bank_account_number,
+            COALESCE(b.bank_name, '') as bank_name,
+            COALESCE(b.bank_ifsc, '') as bank_ifsc,
+            COALESCE(b.bank_branch, '') as bank_branch,
+            COALESCE(upi.upi_address, '') as upi_address,
+            COALESCE(upi.image_name, '') as upi_image,
+            (SELECT COUNT(*) FROM users WHERE introducer_id = u.user_id) as referral_count
+        FROM users u
+        LEFT JOIN banks b ON u.user_id = b.user_id
+        LEFT JOIN upis upi ON u.user_id = upi.user_id
+        WHERE u.role != 'admin'
+    `;
+
         const queryParams = [];
         let paramIndex = 1;
         const whereClauses = [];
 
+        // Add dynamic conditions
         if (searchTerm) {
-            whereClauses.push(`LOWER(u.username) LIKE LOWER($${paramIndex++}) OR LOWER(u.user_id) LIKE LOWER($${paramIndex++}) OR LOWER(u.mobile) LIKE LOWER($${paramIndex++})`);
+            whereClauses.push(`(LOWER(u.username) LIKE LOWER($${paramIndex++}) OR LOWER(u.user_id) LIKE LOWER($${paramIndex++}) OR LOWER(u.mobile) LIKE LOWER($${paramIndex++}))`);
             queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`, `%${searchTerm}%`);
         }
 
@@ -9530,13 +9531,17 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
             queryParams.push(toDate);
         }
 
+        // Append conditions only if `whereClauses` is non-empty
         if (whereClauses.length > 0) {
-            query += ` WHERE ${whereClauses.join(' AND ')}`;
+            query += ` AND ${whereClauses.join(' AND ')}`;
         }
 
-        query += ` ORDER BY u.user_id ASC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+        // Add pagination
+        query += ` ORDER BY u.user_id ASC LIMIT $${paramIndex++} OFFSET $${paramIndex}`;
         queryParams.push(pageSize, offset);
 
+        console.log('Final Query:', query);
+        console.log('Query Params:', queryParams);
 
 
         const { rows: members } = await client.query(query, queryParams);
