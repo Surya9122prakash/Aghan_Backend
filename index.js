@@ -4908,6 +4908,7 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
             query += whereClause;
             countQuery += whereClause;
             const searchValue = `%${search}%`;
+            console.log(searchValue)
             queryParams.push(searchValue);
             countParams.push(searchValue);
         }
