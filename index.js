@@ -4891,29 +4891,43 @@ app.get('/user-logs', authenticateToken, authorizeAdmin, async (req, res) => {
         const length = parseInt(req.query.length);
         const search = req.query.search ? req.query.search.value : "";
 
-        let query = 'SELECT username as member, ip_address, browser, TO_CHAR(logged_at, \'YYYY/MM/DD HH24:MI:SS\') AS date FROM user_logs';
-        let countQuery = 'SELECT COUNT(*) FROM user_logs';
-        let queryParams = [];
+        // Base queries
+        let query = `
+            SELECT username as member, ip_address, browser, 
+            TO_CHAR(logged_at, 'YYYY/MM/DD HH24:MI:SS') AS date 
+            FROM user_logs`;
+        let countQuery = `SELECT COUNT(*) AS count FROM user_logs`;
 
+        // Parameters
+        const queryParams = [];
+        const countParams = [];
+
+        // Handle search filtering
         if (search) {
-            query += ` WHERE username ILIKE $1 OR ip_address ILIKE $1 OR browser ILIKE $1`;
-            countQuery += ` WHERE username ILIKE $1 OR ip_address ILIKE $1 OR browser ILIKE $1`;
+            const whereClause = ` WHERE username ILIKE $1 OR ip_address ILIKE $1 OR browser ILIKE $1`;
+            query += whereClause;
+            countQuery += whereClause;
             queryParams.push(`%${search}%`);
+            countParams.push(`%${search}%`);
         }
 
+        // Add ordering, limit, and offset for the main query
         query += ` ORDER BY logged_at DESC LIMIT $2 OFFSET $3`;
         queryParams.push(length, start);
 
+        // Execute the queries
         const { rows: logs } = await client.query(query, queryParams);
-        const { rows: [countResult] } = await client.query(countQuery, search ? queryParams : []);
-        const recordsTotal = countResult.count;
-        const recordsFiltered = countResult.count;
+        const { rows: [countResult] } = await client.query(countQuery, countParams);
 
+        const recordsTotal = parseInt(countResult.count, 10);
+        const recordsFiltered = search ? recordsTotal : recordsTotal;
+
+        // Respond with the data
         res.json({
-            draw: draw,
-            recordsTotal: recordsTotal,
-            recordsFiltered: recordsFiltered,
-            data: logs
+            draw,
+            recordsTotal,
+            recordsFiltered,
+            data: logs,
         });
     } catch (error) {
         console.error('Error fetching user logs:', error);
