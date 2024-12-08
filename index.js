@@ -9417,7 +9417,6 @@ app.get('/admin/download/members-excel', authenticateToken, authorizeAdmin, asyn
             FROM users u
             LEFT JOIN banks b ON u.user_id = b.user_id
             LEFT JOIN upis upi ON u.user_id = upi.user_id
-            WHERE u.role != 'admin'
         `;
         const queryParams = [];
         let paramIndex = 1;
@@ -9535,7 +9534,6 @@ app.get('/admin/download/members-pdf', authenticateToken, authorizeAdmin, async 
             FROM users u
             LEFT JOIN banks b ON u.user_id = b.user_id
             LEFT JOIN upis upi ON u.user_id = upi.user_id
-            WHERE u.role != 'admin'
         `;
         const queryParams = [];
         let paramIndex = 1;
