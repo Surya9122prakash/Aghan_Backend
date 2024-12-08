@@ -7698,7 +7698,6 @@ app.get('/memberList', authenticateToken, authorizeAdmin, async (req, res) => {
                 lock_status,
                 withdrawal_lock_status
             FROM users
-            WHERE role != 'admin'
             ${whereClause}
             ORDER BY id ASC
             LIMIT $${paramIndex} OFFSET $${paramIndex + 1};
@@ -8715,12 +8714,12 @@ app.get('/filteredMemberList', authenticateToken, authorizeAdmin, async (req, re
         const toDate = req.query.toDate || '';
         const offset = (page - 1) * pageSize;
 
-        let whereClause = 'WHERE role != \'admin\''; // Base condition
+        let whereClause = 'WHERE'; // Base condition
         const queryParams = [];
         let paramIndex = 1;
 
         if (searchTerm) {
-            whereClause += ` AND (LOWER(username) LIKE LOWER($${paramIndex++}) OR LOWER(user_id) LIKE LOWER($${paramIndex++}))`;
+            whereClause += ` (LOWER(username) LIKE LOWER($${paramIndex++}) OR LOWER(user_id) LIKE LOWER($${paramIndex++}))`;
             queryParams.push(`%${searchTerm}%`, `%${searchTerm}%`);
         }
 
