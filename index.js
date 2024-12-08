@@ -618,7 +618,7 @@ async function creditDirectReferralIncome(referrerId, amount, userId) {
 
 async function handleRebirthIncome(userId) {
     const client = await pgPool.connect();
-    const rebirthIncome = REBIRTH_WALLET_INCOME;
+
     try {
         const { rows: ancestors } = await client.query(`
             SELECT treelevel1, treelevel2, treelevel3, treelevel4
@@ -635,16 +635,43 @@ async function handleRebirthIncome(userId) {
             console.log("No eligible ancestors for rebirth income for user:", userId);
             return;
         }
-        await client.query(`
-            UPDATE users
-            SET rebirth_balance = rebirth_balance + $1
-            WHERE user_id = ANY($2)
-        `, [rebirthIncome, ancestorIds]);
+        const { rows: packages } = await client.query(`
+            SELECT package_price, level1, level2, level3, level4
+            FROM packages
+            LIMIT 1
+        `);
 
-        await Promise.all(ancestorIds.map(async (ancestorId) => {
-            await recordWalletTransaction(userId, rebirthIncome, 'REBIRTH_INCOME', ancestorId);
-            console.log(`Rebirth income of ₹${rebirthIncome} credited to ancestor ${ancestorId} from user ${userId}`);
-        }));
+        if (!packages || packages.length === 0) {
+            console.log("No package details found for rebirth income calculation.");
+            return;
+        }
+        const { package_price, level1, level2, level3, level4 } = packages[0];
+        const levelPercentages = {
+            1: level1,
+            2: level2,
+            3: level3,
+            4: level4
+        };
+        const updates = [];
+        for (let level = 1; level <= 4; level++) {
+            const ancestorId = ancestors[0][`treelevel${level}`];
+            if (ancestorId) {
+                const incomePercent = levelPercentages[level];
+                const rebirthIncome = (package_price * incomePercent) / 100;
+
+                if (rebirthIncome > 0) {
+                    updates.push(client.query(`
+                        UPDATE users
+                        SET rebirth_balance = rebirth_balance + $1
+                        WHERE user_id = $2
+                    `, [rebirthIncome, ancestorId]));
+                    updates.push(recordWalletTransaction(userId, rebirthIncome, 'REBIRTH_INCOME', ancestorId));
+                    console.log(`Rebirth income of ₹${rebirthIncome} credited to ancestor ${ancestorId} from user ${userId}`);
+                }
+            }
+        }
+
+        await Promise.all(updates);
 
     } catch (error) {
         console.error("Error handling rebirth income:", error);
@@ -1145,7 +1172,7 @@ async function calculateLevelIncomeForBoard(userId, boardType) {
 
             for (const referralId of referralsAtLevel) {
                 if (referralId) { // Check if referralId exists.  If null, skip this referral
-                    const levelIncome = REGISTRATION_FEE * levelPercentage;
+                    const levelIncome = (REGISTRATION_FEE * levelPercentage)/100;
                     levelIncomes.push({
                         referrerId: userId, // Referrer is always the user triggering the distribution
                         levelIncome,
@@ -1405,7 +1432,7 @@ async function distributeSilverBoardLevelIncome(userId, levelIncome) {
             for (const memberId of memberIds) {
                 if (memberId) { //Check if memberId exists
                     try {
-                        const levelIncome = REGISTRATION_FEE * levelPercentage;
+                        const levelIncome = (REGISTRATION_FEE * levelPercentage)/100;
                         await client.query(
                             `UPDATE users SET silver_board_income = COALESCE(silver_board_income, 0) + $1 WHERE user_id = $2`,
                             [levelIncome, memberId]
@@ -1515,7 +1542,7 @@ async function distributeBoardLevelIncome(userId, boardType) {
 
             for (const referralId of referralsAtLevel) {
                 if (referralId) {
-                    const levelIncome = REGISTRATION_FEE * levelPercentage;
+                    const levelIncome = (REGISTRATION_FEE * levelPercentage)/100;
                     levelIncomes.push({
                         referrerId: userId,
                         levelIncome,
@@ -1544,7 +1571,6 @@ async function distributeBoardLevelIncome(userId, boardType) {
                 console.log(`Level ${level} income of ₹${levelIncome} credited to referrer ${referrerId} for user ${referralId} in ${boardType} board.`);
             } catch (error) {
                 console.error(`Error distributing income at level ${level} to user ${referralId}:`, error);
-                // Consider rollback or individual error handling
             }
         }));
 
@@ -4326,8 +4352,6 @@ app.put('/packages/:package_id', authenticateToken, authorizeAdmin, async (req, 
             level2,
             level3,
             level4,
-            level5,
-            level6,
             package_image
         } = req.body;
 
@@ -4351,11 +4375,11 @@ app.put('/packages/:package_id', authenticateToken, authorizeAdmin, async (req, 
         let query = `
             UPDATE packages 
             SET package_name = $1, package_price = $2, package_gst = $3, 
-                level1 = $4, level2 = $5, level3 = $6, level4 = $7, level5 = $8, level6 = $9, updated_at = CURRENT_TIMESTAMP
+                level1 = $4, level2 = $5, level3 = $6, level4 = $7 updated_at = CURRENT_TIMESTAMP
         `;
         const values = [
             package_name, package_price, package_gst, level1, level2, level3,
-            level4, level5, level6
+            level4
         ];
 
         if (imageUrl) { // Only update the image if a new one is provided
@@ -4748,21 +4772,21 @@ app.put('/level_income_plans/:id', authenticateToken, authorizeAdmin, async (req
     const client = await pgPool.connect();
     try {
         const planId = req.params.id;
-        const { boardname, level1, level2, level3, level4, level5, level6, first_earning, upgrade } = req.body; // Get updated data
+        const { boardname, level1, level2, level3, level4, level5, first_earning, upgrade } = req.body; // Get updated data
 
-        console.log(boardname, level1, level2, level3, level4, level5, level6, first_earning, upgrade)
+        console.log(boardname, level1, level2, level3, level4, level5, first_earning, upgrade)
 
         // Input Validation (Important!)
-        if (!boardname || !level1 || !level2 || !level3 || !level4 || !level5 || !level6 || !first_earning || !upgrade) {
+        if (!boardname || !level1 || !level2 || !level3 || !level4 || !level5 || !first_earning || !upgrade) {
             return res.status(400).json({ message: "All fields are required" });
         }
 
         const updateQuery = `
             UPDATE level_income_plan
-            SET boardname = $1, level1 = $2, level2 = $3, level3 = $4, level4 = $5, level5 = $6, level6 = $7, first_earning = $8, upgrade = $9
-            WHERE id = $10
+            SET boardname = $1, level1 = $2, level2 = $3, level3 = $4, level4 = $5, level5 = $6, first_earning = $7, upgrade = $8
+            WHERE id = $9
         `;
-        const updateParams = [boardname, level1, level2, level3, level4, level5, level6, first_earning, upgrade, planId];
+        const updateParams = [boardname, level1, level2, level3, level4, level5, first_earning, upgrade, planId];
 
         const result = await client.query(updateQuery, updateParams);
 
