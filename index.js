@@ -1759,14 +1759,14 @@ app.post('/register', async (req, res) => {
             otp,
             address,
             city,
-            zipcode,
+            mobile,
             country,
             state,
             password,
             confirmPassword
         } = req.body;
         console.log("@req.body", req.body)
-        const requiredFields = ['username', 'email', 'otp', 'address', 'city', 'zipcode', 'country', 'state', 'password', 'confirmPassword'];
+        const requiredFields = ['username', 'email', 'otp', 'address', 'city', 'mobile', 'country', 'state', 'password', 'confirmPassword'];
         const nullFields = requiredFields.filter(field => req.body[field] === null);
 
         if (nullFields.length > 0) {
@@ -1797,8 +1797,8 @@ app.post('/register', async (req, res) => {
             return res.status(400).json({ message: 'Invalid OTP. OTP must be 6 digits.' });
         }
 
-        if (zipcode.length !== 6) {
-            return res.status(400).json({ message: 'Invalid Zipcode. Zipcode must be 6 digits.' });
+        if (mobile.length !== 10) {
+            return res.status(400).json({ message: 'Invalid Mobile Number. Mobile Number must be 10 digits.' });
         }
 
         if (password.length < 5) {
@@ -1828,9 +1828,9 @@ app.post('/register', async (req, res) => {
 
         // Insert user into the database
         await client.query(
-            `INSERT INTO users (id,user_id, introducer_id, username, email, address, city, zipcode, country, state, password) 
+            `INSERT INTO users (id,user_id, introducer_id, username, email, address, city, mobile, country, state, password) 
              VALUES (263,$1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-            [user_id, effectiveIntroducerId, username, email, address, city, zipcode, country, state, hashedPassword]
+            [user_id, effectiveIntroducerId, username, email, address, city, mobile, country, state, hashedPassword]
         );
         await findAndPlaceUser(user_id, effectiveIntroducerId);
         // Send email with user_id
