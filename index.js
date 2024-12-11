@@ -1828,8 +1828,8 @@ app.post('/register', async (req, res) => {
 
         // Insert user into the database
         await client.query(
-            `INSERT INTO users (id,user_id, introducer_id, username, email, address, city, mobile, country, state, password) 
-             VALUES (263,$1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+            `INSERT INTO users (user_id, introducer_id, username, email, address, city, mobile, country, state, password) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
             [user_id, effectiveIntroducerId, username, email, address, city, mobile, country, state, hashedPassword]
         );
         await findAndPlaceUser(user_id, effectiveIntroducerId);
